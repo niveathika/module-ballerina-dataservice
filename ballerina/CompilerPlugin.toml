@@ -1,0 +1,6 @@
+[plugin]
+id = "dataservice-compiler-plugin"
+class = "io.ballerina.lib.dataservice.compiler.DataserviceCompilerPlugin"
+
+[[dependency]]
+path = "../compiler-plugin/build/libs/dataservice-compiler-plugin-0.1.0-SNAPSHOT.jar"
