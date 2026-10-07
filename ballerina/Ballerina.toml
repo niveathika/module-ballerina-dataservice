@@ -1,0 +1,12 @@
+[package]
+org = "ballerina"
+name = "dataservice"
+version = "0.1.0"
+authors = ["Ballerina"]
+keywords = ["dataservice", "persist", "data"]
+repository = "https://github.com/ballerina-platform/module-ballerina-dataservice"
+license = ["Apache-2.0"]
+distribution = "2201.14.0"
+
+[platform.java25]
+graalvmCompatible = true
