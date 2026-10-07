@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "regular_package"
+version = "0.1.0"
