@@ -1,8 +1,8 @@
 ## Overview
 
-The `ballerina/dataservice` package supports data services that `bal persist` generates over a persist model. It provides the `@dataservice:Expose` annotation, which restricts the actions a data service allows on an entity, and the error types that generated data services return.
+The `ballerina/dataservice` package supports data services that `bal persist` generates over a persist model. It provides the `@dataservice:Expose` annotation, which exposes an entity in a data service and sets the actions it allows, and the error types that generated data services return.
 
-A data service is enabled in the `[[tool.persist]]` entry of `Ballerina.toml`, and is generated on `bal build`. The package is imported only when the model uses the annotation.
+A data service is enabled in the `[[tool.persist]]` entry of `Ballerina.toml`, and is generated on `bal build`.
 
 ## Quick start
 
@@ -17,19 +17,20 @@ A data service is enabled in the `[[tool.persist]]` entry of `Ballerina.toml`, a
     options.dataservice.protocol = "http"
     ```
 
-2. Restrict an entity in `persist/model.bal`. `Department` allows only reads; `Employee` allows every action that `Ballerina.toml` grants.
+2. Expose entities in `persist/model.bal`. `Employee` allows every action and `Department` allows only reads.
 
     ```ballerina
     import ballerina/persist as _;
     import ballerina/dataservice;
 
-    @dataservice:Expose {operations: [dataservice:READ]}
-    type Department record {|
+    @dataservice:Expose
+    type Employee record {|
         readonly int id;
         string name;
     |};
 
-    type Employee record {|
+    @dataservice:Expose {operations: [dataservice:READ]}
+    type Department record {|
         readonly int id;
         string name;
     |};

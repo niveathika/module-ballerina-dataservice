@@ -12,6 +12,7 @@ type Employee record {|
     string name;
 |};
 
+@dataservice:Expose
 type Project record {|
     readonly string code;
 |};

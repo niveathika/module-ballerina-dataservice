@@ -24,10 +24,10 @@ public enum Operation {
 
 # Configuration of the `Expose` annotation.
 #
-# + operations - The actions the entity allows; narrows the operations set in `Ballerina.toml`
+# + operations - The actions the entity allows
 public type ExposeConfig record {|
-    Operation[] operations;
+    Operation[] operations = [READ, CREATE, UPDATE, DELETE];
 |};
 
-# Restricts the actions a data service allows on a persist entity.
+# Exposes a persist entity in the data service, allowing the given actions.
 public annotation ExposeConfig Expose on type;

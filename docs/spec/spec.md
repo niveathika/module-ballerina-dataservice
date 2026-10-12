@@ -3,7 +3,7 @@
 _Authors_: @niveathika \
 _Reviewers_: TBD \
 _Created_: 2026/10/07 \
-_Updated_: 2026/10/07 \
+_Updated_: 2026/10/12 \
 _Edition_: Swan Lake
 
 ## Introduction
@@ -12,7 +12,7 @@ This is the specification for the `dataservice` library of the [Ballerina langua
 
 The library does not generate or run a service. It provides:
 
-- the `@dataservice:Expose` annotation, which a persist model uses to restrict an entity,
+- the `@dataservice:Expose` annotation, which a persist model uses to expose an entity and choose its actions,
 - a compiler plugin that validates the annotation, and
 - the protocol-neutral types that generated data services return.
 
@@ -47,23 +47,27 @@ Each action enables a fixed set of operations:
 | `UPDATE` | Patch one |
 | `DELETE` | Delete one |
 
-The member values are the strings that `options.dataservice.operations` uses in `Ballerina.toml`.
-
 ## 2. The `Expose` annotation
 
 ```ballerina
 public type ExposeConfig record {|
-    Operation[] operations;
+    Operation[] operations = [READ, CREATE, UPDATE, DELETE];
 |};
 
 public annotation ExposeConfig Expose on type;
 ```
 
-The annotation is placed on an entity in a persist model. It narrows the actions that the entity allows: the entity's effective actions are those listed both in `options.dataservice.operations` and in the annotation. The annotation never widens what `Ballerina.toml` grants. An entity without the annotation allows every action that `Ballerina.toml` grants.
+The annotation is placed on an entity in a persist model. Exposure is opt-in: a data service exposes an entity only when the entity has the annotation, and the entity allows exactly the actions in `operations`. Without `operations`, it allows every action.
 
 ```ballerina
 import ballerina/persist as _;
 import ballerina/dataservice;
+
+@dataservice:Expose
+type Employee record {|
+    readonly int id;
+    string name;
+|};
 
 @dataservice:Expose {operations: [dataservice:READ]}
 type Department record {|
@@ -71,6 +75,8 @@ type Department record {|
     string name;
 |};
 ```
+
+`Employee` allows every action and `Department` allows only reads. An entity without the annotation is not exposed.
 
 An operation may be written as an `Operation` member or as its string value. `dataservice:READ` and `"read"` are the same operation.
 
@@ -84,7 +90,7 @@ The compiler plugin reports the following errors.
 | `DATASERVICE_102` | `operations` is an empty list. |
 | `DATASERVICE_103` | `operations` lists the same operation more than once. |
 
-`DATASERVICE_102` and `DATASERVICE_103` are checked only when `operations` is a list constructor. Checks that depend on `Ballerina.toml`, such as an entity whose effective actions are empty, are made by `bal persist` when it generates the service.
+`DATASERVICE_102` and `DATASERVICE_103` are checked only when `operations` is a list constructor. Checks that need the whole model, such as a data service that exposes no entity, are made by `bal persist` when it generates the service.
 
 ## 4. Errors
 
