@@ -18,16 +18,14 @@
 
 package io.ballerina.lib.dataservice.compiler;
 
+import io.ballerina.compiler.api.symbols.AnnotationAttachmentSymbol;
 import io.ballerina.compiler.api.symbols.AnnotationSymbol;
 import io.ballerina.compiler.api.symbols.ModuleSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
+import io.ballerina.compiler.api.symbols.TypeDefinitionSymbol;
+import io.ballerina.compiler.api.values.ConstantValue;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
-import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
-import io.ballerina.compiler.syntax.tree.ExpressionNode;
-import io.ballerina.compiler.syntax.tree.ListConstructorExpressionNode;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
-import io.ballerina.compiler.syntax.tree.Node;
-import io.ballerina.compiler.syntax.tree.QualifiedNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.TypeDefinitionNode;
@@ -40,13 +38,14 @@ import io.ballerina.tools.diagnostics.Location;
 
 import java.nio.file.Path;
 import java.util.HashSet;
-import java.util.Locale;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_101;
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_102;
-import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_103;
 
 /**
  * Validates the usage of the `@dataservice:Expose` annotation.
@@ -66,19 +65,18 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
             return;
         }
         for (AnnotationNode annotation : typeDefinition.metadata().get().annotations()) {
-            if (!isExposeAnnotation(ctx, annotation)) {
+            if (!isExposeAnnotation(ctx.semanticModel().symbol(annotation))) {
                 continue;
             }
             if (typeDefinition.typeDescriptor().kind() != SyntaxKind.RECORD_TYPE_DESC || !isPersistModel(ctx)) {
                 report(ctx, DATASERVICE_101, annotation.location());
                 continue;
             }
-            validateOperations(ctx, annotation);
+            validateOperations(ctx, typeDefinition, annotation);
         }
     }
 
-    private static boolean isExposeAnnotation(SyntaxNodeAnalysisContext ctx, AnnotationNode annotation) {
-        Optional<Symbol> symbol = ctx.semanticModel().symbol(annotation);
+    private static boolean isExposeAnnotation(Optional<? extends Symbol> symbol) {
         if (symbol.isEmpty() || !(symbol.get() instanceof AnnotationSymbol annotationSymbol)) {
             return false;
         }
@@ -108,45 +106,54 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
         return false;
     }
 
-    private static void validateOperations(SyntaxNodeAnalysisContext ctx, AnnotationNode annotation) {
-        if (annotation.annotValue().isEmpty()) {
+    // The annotation is a const annotation, so its evaluated value also covers operations given as a constant.
+    private static void validateOperations(SyntaxNodeAnalysisContext ctx, TypeDefinitionNode typeDefinition,
+                                           AnnotationNode annotation) {
+        Optional<Symbol> symbol = ctx.semanticModel().symbol(typeDefinition);
+        if (symbol.isEmpty() || !(symbol.get() instanceof TypeDefinitionSymbol type)) {
             return;
         }
-        for (MappingFieldNode field : annotation.annotValue().get().fields()) {
-            if (!(field instanceof SpecificFieldNode specificField)
-                    || !OPERATIONS_FIELD.equals(specificField.fieldName().toSourceCode().trim())
-                    || specificField.valueExpr().isEmpty()) {
+        for (AnnotationAttachmentSymbol attachment : type.annotAttachments()) {
+            if (!isExposeAnnotation(Optional.of(attachment.typeDescriptor())) || !attachment.isConstAnnotation()) {
                 continue;
             }
-            // Only a list constructor can be checked here; a constant reference is checked by the persist tool.
-            ExpressionNode value = specificField.valueExpr().get();
-            if (!(value instanceof ListConstructorExpressionNode list)) {
-                continue;
-            }
-            if (list.expressions().isEmpty()) {
-                report(ctx, DATASERVICE_102, value.location());
-                continue;
-            }
-            Set<String> seen = new HashSet<>();
-            for (Node member : list.expressions()) {
-                Optional<String> operation = operationValue(member);
-                if (operation.isPresent() && !seen.add(operation.get())) {
-                    report(ctx, DATASERVICE_103, member.location(), operation.get());
-                }
+            Set<String> duplicates = duplicates(attachment.attachmentValue().map(ConstantValue::value).orElse(null));
+            for (String operation : duplicates) {
+                report(ctx, DATASERVICE_102, operationsLocation(annotation), operation);
             }
         }
     }
 
-    // Enum member names are the upper-case form of their values, so `READ` and `"read"` are the same operation.
-    private static Optional<String> operationValue(Node member) {
-        if (member instanceof QualifiedNameReferenceNode reference) {
-            return Optional.of(reference.identifier().text().trim().toLowerCase(Locale.ROOT));
+    private static Set<String> duplicates(Object config) {
+        Set<String> duplicates = new LinkedHashSet<>();
+        if (!(unwrap(config) instanceof Map<?, ?> fields)
+                || !(unwrap(fields.get(OPERATIONS_FIELD)) instanceof List<?> operations)) {
+            return duplicates;
         }
-        if (member instanceof BasicLiteralNode literal && literal.kind() == SyntaxKind.STRING_LITERAL) {
-            String text = literal.literalToken().text().trim();
-            return Optional.of(text.substring(1, text.length() - 1));
+        Set<String> seen = new HashSet<>();
+        for (Object operation : operations) {
+            String value = String.valueOf(unwrap(operation));
+            if (!seen.add(value)) {
+                duplicates.add(value);
+            }
         }
-        return Optional.empty();
+        return duplicates;
+    }
+
+    private static Object unwrap(Object value) {
+        return value instanceof ConstantValue constant ? unwrap(constant.value()) : value;
+    }
+
+    private static Location operationsLocation(AnnotationNode annotation) {
+        if (annotation.annotValue().isPresent()) {
+            for (MappingFieldNode field : annotation.annotValue().get().fields()) {
+                if (field instanceof SpecificFieldNode specificField && specificField.valueExpr().isPresent()
+                        && OPERATIONS_FIELD.equals(specificField.fieldName().toSourceCode().trim())) {
+                    return specificField.valueExpr().get().location();
+                }
+            }
+        }
+        return annotation.location();
     }
 
     private static void report(SyntaxNodeAnalysisContext ctx, DiagnosticCodes code, Location location,

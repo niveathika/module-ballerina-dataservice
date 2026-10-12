@@ -17,7 +17,7 @@ A data service is enabled in the `[[tool.persist]]` entry of `Ballerina.toml`, a
     options.dataservice.protocol = "http"
     ```
 
-2. Expose entities in `persist/model.bal`. `Employee` allows every action and `Department` allows only reads.
+2. Expose entities in `persist/model.bal`. `Department` allows only reads; `Employee` allows every action, or the actions set in `options.dataservice.operations`.
 
     ```ballerina
     import ballerina/persist as _;

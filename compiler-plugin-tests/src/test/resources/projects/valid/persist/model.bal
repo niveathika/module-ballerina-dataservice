@@ -1,5 +1,7 @@
 import ballerina/dataservice;
 
+const READ_ONLY = [dataservice:READ];
+
 @dataservice:Expose {operations: [dataservice:READ, dataservice:UPDATE]}
 type Department record {|
     readonly int id;
@@ -15,4 +17,9 @@ type Employee record {|
 @dataservice:Expose
 type Project record {|
     readonly string code;
+|};
+
+@dataservice:Expose {operations: READ_ONLY}
+type Location record {|
+    readonly int id;
 |};

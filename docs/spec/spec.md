@@ -51,13 +51,15 @@ Each action enables a fixed set of operations:
 
 ```ballerina
 public type ExposeConfig record {|
-    Operation[] operations = [READ, CREATE, UPDATE, DELETE];
+    [Operation, Operation...] operations?;
 |};
 
-public annotation ExposeConfig Expose on type;
+public const annotation ExposeConfig Expose on source type;
 ```
 
-The annotation is placed on an entity in a persist model. Exposure is opt-in: a data service exposes an entity only when the entity has the annotation, and the entity allows exactly the actions in `operations`. Without `operations`, it allows every action.
+The annotation is placed on an entity in a persist model. Exposure is opt-in: a data service exposes an entity only when the entity has the annotation. The entity allows the actions in `operations`. Without `operations`, it allows the actions in `options.dataservice.operations` of `Ballerina.toml`, or every action when that is not set either.
+
+`Expose` is a constant annotation: its value is evaluated at compile time and is not available at runtime. `operations` is therefore a constant expression, such as a list constructor or a constant declared in the model, and it cannot be empty.
 
 ```ballerina
 import ballerina/persist as _;
@@ -76,21 +78,20 @@ type Department record {|
 |};
 ```
 
-`Employee` allows every action and `Department` allows only reads. An entity without the annotation is not exposed.
+`Department` allows only reads. `Employee` allows the actions set in `Ballerina.toml`, or every action. An entity without the annotation is not exposed.
 
 An operation may be written as an `Operation` member or as its string value. `dataservice:READ` and `"read"` are the same operation.
 
 ## 3. Compiler validation
 
-The compiler plugin reports the following errors.
+An empty `operations` list and an unknown operation are type errors. In addition, the compiler plugin reports the following errors.
 
 | Code | Reported when |
 |---|---|
 | `DATASERVICE_101` | `@dataservice:Expose` is used on a type that is not a record type in a persist model. A persist model is a file in the package's `persist` directory, or in a subdirectory of it, compiled as a single file. |
-| `DATASERVICE_102` | `operations` is an empty list. |
-| `DATASERVICE_103` | `operations` lists the same operation more than once. |
+| `DATASERVICE_102` | `operations` lists the same operation more than once, including through a constant. |
 
-`DATASERVICE_102` and `DATASERVICE_103` are checked only when `operations` is a list constructor. Checks that need the whole model, such as a data service that exposes no entity, are made by `bal persist` when it generates the service.
+Checks that need the whole model, such as a data service that exposes no entity, are made by `bal persist` when it generates the service.
 
 ## 4. Errors
 

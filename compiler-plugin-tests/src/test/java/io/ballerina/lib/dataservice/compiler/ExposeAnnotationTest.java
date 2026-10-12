@@ -56,15 +56,24 @@ public class ExposeAnnotationTest {
     @Test
     public void testEmptyOperations() {
         List<Diagnostic> errors = errors(loadModel("empty_operations", "persist", "model.bal"));
-        assertDiagnostic(errors, "DATASERVICE_102",
-                "the 'operations' of the 'Expose' annotation cannot be empty", 3);
+        Assert.assertEquals(errors.size(), 1, errors.toString());
+        Assert.assertEquals(errors.get(0).message(),
+                "incompatible types: expected '[ballerina/dataservice:0.1.0:Operation," +
+                        "ballerina/dataservice:0.1.0:Operation...]?', found '[]'");
     }
 
     @Test
     public void testDuplicateOperations() {
         List<Diagnostic> errors = errors(loadModel("duplicate_operations", "persist", "model.bal"));
-        assertDiagnostic(errors, "DATASERVICE_103",
+        assertDiagnostic(errors, "DATASERVICE_102",
                 "the operation 'read' is listed more than once in the 'Expose' annotation", 3);
+    }
+
+    @Test
+    public void testDuplicateOperationsInConstant() {
+        List<Diagnostic> errors = errors(loadModel("duplicate_constant", "persist", "model.bal"));
+        assertDiagnostic(errors, "DATASERVICE_102",
+                "the operation 'read' is listed more than once in the 'Expose' annotation", 5);
     }
 
     @Test

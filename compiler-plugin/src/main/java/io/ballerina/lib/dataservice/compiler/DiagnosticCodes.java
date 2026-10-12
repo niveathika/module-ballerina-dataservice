@@ -29,8 +29,7 @@ public enum DiagnosticCodes {
 
     DATASERVICE_101("DATASERVICE_101",
             "the ''Expose'' annotation can only be used on an entity record type in a persist model", ERROR),
-    DATASERVICE_102("DATASERVICE_102", "the ''operations'' of the ''Expose'' annotation cannot be empty", ERROR),
-    DATASERVICE_103("DATASERVICE_103",
+    DATASERVICE_102("DATASERVICE_102",
             "the operation ''{0}'' is listed more than once in the ''Expose'' annotation", ERROR);
 
     private final String code;
