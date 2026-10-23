@@ -3,17 +3,20 @@
 _Owners_: @niveathika  
 _Reviewers_:  
 _Created_: 2026/10/22  
-_Updated_: 2026/10/22  
+_Updated_: 2026/10/23  
 _Edition_: Swan Lake
 
 ## Introduction
 
 This is the specification for the `ballerina/dataservice` package of the [Ballerina language](https://ballerina.io/).
-The package supports the data services that `bal persist` generates from a persist model, as defined in the
-[data service proposal](https://github.com/ballerina-platform/ballerina-spec/issues/1503). It holds the annotation
+The package supports the data services that `bal persist` generates from a persist model. It holds the annotation
 that selects what a data service exposes, and the protocol-neutral runtime that generated services call: the error
 body and codes, the mapping from persist errors to them, and the value conversions every protocol shares. Each
-protocol has its own package, such as `ballerina/dataservice.http`.
+protocol has its own package, such as `ballerina/dataservice.http`. How the persist tool generates a service is
+specified in the [persist tool specification](https://github.com/ballerina-platform/persist-tools/blob/main/docs/spec/spec.md#7-data-service-generation).
+
+The functions that generated code calls are a stable API. New behaviour is added through new functions or optional
+parameters.
 
 The conforming implementation of the specification is released and included in the distribution. Any deviation from
 the specification is considered a bug.
