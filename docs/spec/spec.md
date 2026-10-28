@@ -39,6 +39,7 @@ the specification is considered a bug.
     * [7.3. Reading by keys](#73-reading-by-keys)
     * [7.4. Fields](#74-fields)
     * [7.5. Relations](#75-relations)
+* [8. Constraints](#8-constraints)
 
 ## 1. The `Expose` annotation
 
@@ -123,7 +124,7 @@ as an HTTP status code.
 | Not found | `NOT_FOUND` | No record has the given key | `persist:NotFoundError` |
 | Conflict | `CONFLICT` | A record with the key or a unique value already exists | `persist:AlreadyExistsError` |
 | Constraint violation | `CONSTRAINT_VIOLATION` | A write violates a foreign key | `persist:ConstraintViolationError` |
-| Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, a value is not in its format, a key is not a finite number, or a create holds too many records | The protocol module's binding error, a [`ConversionError`](#3-value-conversions), [`checkFiniteKey`](#23-checking-keys) or [`checkCreateSize`](#5-paging) |
+| Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, a value is not in its format or breaks a constraint, a key is not a finite number, or a create holds too many records | The protocol module's binding error, a [`ConversionError`](#3-value-conversions), [`checkFiniteKey`](#23-checking-keys) or [`checkCreateSize`](#5-paging) |
 | Forbidden | `FORBIDDEN` | Get related or a relation in `fields` needs `read` scopes that the entity's `read` scopes do not cover | [`forbidden`](#24-forbidden-relations) |
 | Internal | `INTERNAL` | Any other failure | `persist:Error` and others |
 
@@ -478,4 +479,17 @@ public isolated function attachMany(map<anydata> partial, Entity entity, string 
   them, and `attachMany` adds them as `{"items": [...], "hasMore": ...}`. The related records are narrowed to the
   `<relation>.<field>` names, or kept whole when the relation is named alone.
 - **Composite links** match as `OR` over the link tuples.
+
+## 8. Constraints
+
+```ballerina
+public isolated function checkConstraints(record {} value, string entity) returns DataserviceError?;
+```
+
+A protocol whose wire types hold dates, times and `byte[]` values as strings cannot check the model's
+`ballerina/constraint` annotations on those fields on the request. It converts the request to the persist type, which
+carries the annotations, and checks the result with `checkConstraints`. It returns `()` when every constraint holds,
+and otherwise an `INVALID_INPUT` error body for the first broken one, with the message
+`The field '<field>' of the entity '<Entity>' breaks its '<constraint>' constraint.`, where `<constraint>` is the
+name `ballerina/constraint` gives it, such as `maxLength` or `pastDate`.
 
