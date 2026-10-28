@@ -66,3 +66,16 @@ function testPersistErrorIsInternal() {
 function testOtherErrorIsInternal() {
     test:assertEquals(toErrorBody(error("boom")), {code: INTERNAL, message: "An internal error occurred."});
 }
+
+@test:Config
+function testFiniteKey() {
+    test:assertEquals(checkFiniteKey("Rate", [1.5, "x"]), ());
+    test:assertEquals(checkFiniteKey("Rate", [1, float:NaN]), {
+        code: INVALID_INPUT,
+        message: "The key '1/NaN' of the entity 'Rate' is not a finite number."
+    });
+    test:assertEquals(checkFiniteKey("Rate", [-float:Infinity]), {
+        code: INVALID_INPUT,
+        message: "The key '-Infinity' of the entity 'Rate' is not a finite number."
+    });
+}

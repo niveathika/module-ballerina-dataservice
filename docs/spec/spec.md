@@ -27,8 +27,10 @@ the specification is considered a bug.
 * [2. Errors](#2-errors)
     * [2.1. The error body](#21-the-error-body)
     * [2.2. Mapping persist errors](#22-mapping-persist-errors)
+    * [2.3. Checking keys](#23-checking-keys)
 * [3. Value conversions](#3-value-conversions)
 * [4. Compiler plugin](#4-compiler-plugin)
+* [5. Paging](#5-paging)
 
 ## 1. The `Expose` annotation
 
@@ -99,7 +101,7 @@ as an HTTP status code.
 | Not found | `NOT_FOUND` | No record has the given key | `persist:NotFoundError` |
 | Conflict | `CONFLICT` | A record with the key or a unique value already exists | `persist:AlreadyExistsError` |
 | Constraint violation | `CONSTRAINT_VIOLATION` | A write violates a foreign key | `persist:ConstraintViolationError` |
-| Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, or a value is not in its format | The protocol module's binding error, or a [`ConversionError`](#3-value-conversions) |
+| Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, a value is not in its format, a key is not a finite number, or a create holds too many records | The protocol module's binding error, a [`ConversionError`](#3-value-conversions), [`checkFiniteKey`](#23-checking-keys) or [`checkCreateSize`](#5-paging) |
 | Internal | `INTERNAL` | Any other failure | `persist:Error` and others |
 
 ### 2.2. Mapping persist errors
@@ -128,6 +130,17 @@ written `P1/1`, `1.5` stays `1.5`, and a `decimal` keeps its scale.
 
 For a constraint violation and an internal error, the function logs the error, with the entity's name, at the `ERROR`
 level. The error's own message is not returned to the caller.
+
+### 2.3. Checking keys
+
+```ballerina
+public isolated function checkFiniteKey(string entity, KeyValue[] key) returns DataserviceError?;
+```
+
+`checkFiniteKey` returns an `INVALID_INPUT` error body when a `float` value of the key is `NaN` or infinite, with the
+message `The key '<key>' of the entity '<Entity>' is not a finite number.`, where `<key>` is written as in
+[2.2](#22-mapping-persist-errors). A protocol calls it before it reads, updates or deletes a record by a key that has a
+`float` field.
 
 ## 3. Value conversions
 
@@ -183,3 +196,27 @@ It does nothing in any other source.
 
 `<value>` is the repeated operation as it is written, such as `dataservice:READ` or `"read"`. An operation written
 as a member and as its string value is a duplicate. Each repeat is reported.
+
+## 5. Paging
+
+```ballerina
+public type PageConfig readonly & record {|
+    int size;
+    int maxSize;
+|};
+
+public isolated function pageConfig(int size, int maxSize) returns PageConfig|error;
+public isolated function checkCreateSize(int count, PageConfig config) returns DataserviceError?;
+```
+
+A generated service declares its page sizes as configurable values and checks them at startup with a module-level
+`check` on `pageConfig`, so the program stops when a value is out of range:
+
+| Case | Message |
+|---|---|
+| `maxSize` below 1 | `The configurable value 'dataserviceMaxPageSize' must be at least 1, found <value>.` |
+| `size` below 1 or above `maxSize` | `The configurable value 'dataservicePageSize' must be between 1 and 'dataserviceMaxPageSize' (<max>), found <value>.` |
+
+`size` is the number of records in a page when the caller gives no size. `maxSize` is the largest page, and the most
+records that one create can hold. `checkCreateSize` returns an `INVALID_INPUT` error body with the message
+`A create can hold at most <max> records.` when `count` is above `maxSize`.

@@ -67,6 +67,23 @@ public isolated function toErrorBody(error err, string entity = "", KeyValue[] k
     return {code: INTERNAL, message: "An internal error occurred."};
 }
 
+# Checks that every `float` value of a key is a finite number.
+#
+# + entity - The name of the entity
+# + key - The values of the record's key fields, in key order
+# + return - An `INVALID_INPUT` error body when a value is `NaN` or infinite
+public isolated function checkFiniteKey(string entity, KeyValue[] key) returns DataserviceError? {
+    foreach KeyValue value in key {
+        if value is float && !value.isFinite() {
+            return {
+                code: INVALID_INPUT,
+                message: string `The key '${keyText(key)}' of the entity '${entity}' is not a finite number.`
+            };
+        }
+    }
+    return ();
+}
+
 isolated function keyText(KeyValue[] key) returns string =>
     string:'join("/", ...from KeyValue value in key select value.toString());
 
