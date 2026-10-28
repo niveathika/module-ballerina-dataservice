@@ -45,7 +45,11 @@ public enum DiagnosticCodes {
     DATASERVICE_108("DATASERVICE_108", "@dataservice:{0} cannot be used on the foreign key field ''{1}'' of the " +
             "entity ''{2}''. Use it on the relation field ''{3}''.", ERROR),
     DATASERVICE_109("DATASERVICE_109", "@dataservice:{0} on the field ''{1}'' of the entity ''{2}'' has no " +
-            "effect, because the entity does not allow ''{3}''.", WARNING);
+            "effect, because the entity does not allow ''{3}''.", WARNING),
+    DATASERVICE_110("DATASERVICE_110",
+            "invalid scope ''{0}'' in the @dataservice:Expose annotation of the entity ''{1}''.", ERROR),
+    DATASERVICE_111("DATASERVICE_111", "the @dataservice:Expose annotation of the entity ''{0}'' sets scopes " +
+            "for ''{1}'', which is not in ''operations''.", ERROR);
 
     private final String code;
     private final String message;

@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "scope_not_enabled"
+version = "0.1.0"

@@ -79,3 +79,12 @@ function testFiniteKey() {
         message: "The key '-Infinity' of the entity 'Rate' is not a finite number."
     });
 }
+
+@test:Config
+function testForbidden() {
+    test:assertEquals(forbidden("Employee", "department"), <DataserviceError>{
+        code: FORBIDDEN,
+        message: "The relation 'department' of the entity 'Employee' needs 'read' scopes that the entity's 'read' " +
+            "scopes do not cover."
+    });
+}

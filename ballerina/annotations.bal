@@ -22,11 +22,27 @@ public enum Operation {
     DELETE = "delete"
 }
 
+# The scopes that each action of an entity requires when the data service has auth. A caller needs any one scope of
+# the list; an empty list requires only an authenticated caller.
+#
+# + read - The scopes of `read`; `<resource>:read` when not given
+# + create - The scopes of `create`; `<resource>:create` when not given
+# + update - The scopes of `update`; `<resource>:update` when not given
+# + delete - The scopes of `delete`; `<resource>:delete` when not given
+public type Scopes record {|
+    string[] read?;
+    string[] create?;
+    string[] update?;
+    string[] delete?;
+|};
+
 # Configures the `Expose` annotation.
 #
 # + operations - The actions the entity allows; every action by default
+# + scopes - The scopes each action requires when the data service has auth
 public type ExposeConfig record {|
     [Operation, Operation...] operations = [READ, CREATE, UPDATE, DELETE];
+    Scopes scopes?;
 |};
 
 # Exposes a persist entity in the generated data service.

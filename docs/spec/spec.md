@@ -28,6 +28,7 @@ the specification is considered a bug.
     * [2.1. The error body](#21-the-error-body)
     * [2.2. Mapping persist errors](#22-mapping-persist-errors)
     * [2.3. Checking keys](#23-checking-keys)
+    * [2.4. Forbidden relations](#24-forbidden-relations)
 * [3. Value conversions](#3-value-conversions)
 * [4. Compiler plugin](#4-compiler-plugin)
 * [5. Paging](#5-paging)
@@ -49,8 +50,16 @@ public enum Operation {
     DELETE = "delete"
 }
 
+public type Scopes record {|
+    string[] read?;
+    string[] create?;
+    string[] update?;
+    string[] delete?;
+|};
+
 public type ExposeConfig record {|
     [Operation, Operation...] operations = [READ, CREATE, UPDATE, DELETE];
+    Scopes scopes?;
 |};
 
 public const annotation ExposeConfig Expose on source type;
@@ -69,7 +78,7 @@ Each action enables these operations:
 
 | Action | Operations |
 |---|---|
-| `read` | Get many, get one |
+| `read` | Get many, get one, get related |
 | `create` | Create one, create many |
 | `update` | Patch one |
 | `delete` | Delete one |
@@ -77,6 +86,11 @@ Each action enables these operations:
 `Expose` is a constant annotation. Its value is evaluated at compile time and is not kept at runtime. The type of
 `operations` requires at least one operation, so an empty list is a compile error. An operation is written as an
 `Operation` member, such as `dataservice:READ`, or as its string value, such as `"read"`.
+
+`scopes` gives the scopes each action requires when `options.dataservice.auth` is `true`. A caller needs any one scope
+of an action's list, and an empty list requires only an authenticated caller. An action not listed requires
+`<resource>:<action>`, where `<resource>` is the entity's persist resource name, as in `employees:read`. Without auth,
+no scope is checked.
 
 Whether a data service is generated is decided by `options.dataservice` in the `[[tool.persist]]` entry of
 `Ballerina.toml`. The annotations only select what the service exposes.
@@ -91,6 +105,7 @@ public enum ErrorCode {
     CONFLICT,
     CONSTRAINT_VIOLATION,
     INVALID_INPUT,
+    FORBIDDEN,
     INTERNAL
 }
 
@@ -109,6 +124,7 @@ as an HTTP status code.
 | Conflict | `CONFLICT` | A record with the key or a unique value already exists | `persist:AlreadyExistsError` |
 | Constraint violation | `CONSTRAINT_VIOLATION` | A write violates a foreign key | `persist:ConstraintViolationError` |
 | Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, a value is not in its format, a key is not a finite number, or a create holds too many records | The protocol module's binding error, a [`ConversionError`](#3-value-conversions), [`checkFiniteKey`](#23-checking-keys) or [`checkCreateSize`](#5-paging) |
+| Forbidden | `FORBIDDEN` | Get related or a relation in `fields` needs `read` scopes that the entity's `read` scopes do not cover | [`forbidden`](#24-forbidden-relations) |
 | Internal | `INTERNAL` | Any other failure | `persist:Error` and others |
 
 ### 2.2. Mapping persist errors
@@ -148,6 +164,18 @@ public isolated function checkFiniteKey(string entity, KeyValue[] key) returns D
 message `The key '<key>' of the entity '<Entity>' is not a finite number.`, where `<key>` is written as in
 [2.2](#22-mapping-persist-errors). A protocol calls it before it reads, updates or deletes a record by a key that has a
 `float` field.
+
+### 2.4. Forbidden relations
+
+```ballerina
+public isolated function forbidden(string entity, string relation) returns DataserviceError;
+```
+
+`forbidden` returns the `FORBIDDEN` error body with the message
+`The relation '<relation>' of the entity '<Entity>' needs 'read' scopes that the entity's 'read' scopes do not cover.`
+With auth, get related and a relation in `fields` are protected by the entity's own `read` scopes, so they are
+refused when those scopes do not cover the related entity's: when the related entity's `read` list is not empty, and
+the entity's list is empty or holds a scope the related entity's does not.
 
 ## 3. Value conversions
 
@@ -202,6 +230,9 @@ It does nothing in any other source.
 | `@dataservice:Expose` is on a record type | The plugin, `DATASERVICE_101` | `the @dataservice:Expose annotation is allowed only on a record type in the persist model.` |
 | `operations` is non-empty and has only `Operation` values | The compiler, through the type of `operations` | The compiler's type error |
 | `operations` has no duplicates | The plugin, `DATASERVICE_102` | `duplicate operation '<value>' in the @dataservice:Expose annotation of the entity '<Entity>'.` |
+
+| Each scope is non-empty and has no whitespace | The plugin, `DATASERVICE_110` | `invalid scope '<value>' in the @dataservice:Expose annotation of the entity '<Entity>'.` |
+| `scopes` names only actions in `operations` | The plugin, `DATASERVICE_111` | `the @dataservice:Expose annotation of the entity '<Entity>' sets scopes for '<action>', which is not in 'operations'.` |
 
 `<value>` is the repeated operation as it is written, such as `dataservice:READ` or `"read"`. An operation written
 as a member and as its string value is a duplicate. Each repeat is reported.

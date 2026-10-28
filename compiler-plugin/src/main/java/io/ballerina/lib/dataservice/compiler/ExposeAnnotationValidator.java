@@ -26,6 +26,7 @@ import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
 import io.ballerina.compiler.syntax.tree.ClassDefinitionNode;
 import io.ballerina.compiler.syntax.tree.EnumDeclarationNode;
 import io.ballerina.compiler.syntax.tree.ListConstructorExpressionNode;
+import io.ballerina.compiler.syntax.tree.MappingConstructorExpressionNode;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.Node;
@@ -49,6 +50,8 @@ import java.util.Set;
 
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_101;
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_102;
+import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_110;
+import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_111;
 
 /**
  * Validates the `@dataservice:Expose` annotations of a persist model.
@@ -59,6 +62,7 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
     private static final String MODULE_NAME = "dataservice";
     private static final String EXPOSE_ANNOTATION = "Expose";
     private static final String OPERATIONS_FIELD = "operations";
+    private static final String SCOPES_FIELD = "scopes";
     private static final String PERSIST_DIRECTORY = "persist";
     private static final String BALLERINA_TOML = "Ballerina.toml";
     private static final Set<String> OPERATIONS = Set.of("read", "create", "update", "delete");
@@ -81,7 +85,9 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
             }
             if (node instanceof TypeDefinitionNode type
                     && type.typeDescriptor().kind() == SyntaxKind.RECORD_TYPE_DESC) {
-                reportDuplicates(ctx, annotation, type.typeName().text().trim());
+                String entity = type.typeName().text().trim();
+                reportDuplicates(ctx, annotation, entity);
+                reportInvalidScopes(ctx, annotation, metadata.get(), entity);
             } else {
                 report(ctx, DATASERVICE_101, annotation.location());
             }
@@ -163,6 +169,43 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
                 Optional<String> operation = operationValue(member);
                 if (operation.isPresent() && !seen.add(operation.get())) {
                     report(ctx, DATASERVICE_102, member.location(), member.toSourceCode().trim(), entity);
+                }
+            }
+        }
+    }
+
+    private static void reportInvalidScopes(SyntaxNodeAnalysisContext ctx, AnnotationNode annotation,
+                                            MetadataNode metadata, String entity) {
+        if (annotation.annotValue().isEmpty()) {
+            return;
+        }
+        Set<String> operations = exposedOperations(ctx, metadata);
+        for (MappingFieldNode field : annotation.annotValue().get().fields()) {
+            if (!(field instanceof SpecificFieldNode specificField)
+                    || !SCOPES_FIELD.equals(specificField.fieldName().toSourceCode().trim())
+                    || specificField.valueExpr().isEmpty()
+                    || !(specificField.valueExpr().get() instanceof MappingConstructorExpressionNode scopes)) {
+                continue;
+            }
+            for (MappingFieldNode actionField : scopes.fields()) {
+                if (!(actionField instanceof SpecificFieldNode action)) {
+                    continue;
+                }
+                String name = action.fieldName().toSourceCode().trim();
+                if (!operations.contains(name)) {
+                    report(ctx, DATASERVICE_111, action.fieldName().location(), entity, name);
+                }
+                if (action.valueExpr().isPresent()
+                        && action.valueExpr().get() instanceof ListConstructorExpressionNode list) {
+                    for (Node member : list.expressions()) {
+                        if (member instanceof BasicLiteralNode literal && literal.kind() == SyntaxKind.STRING_LITERAL) {
+                            String text = literal.literalToken().text();
+                            String scope = text.substring(1, text.length() - 1);
+                            if (scope.isEmpty() || scope.chars().anyMatch(Character::isWhitespace)) {
+                                report(ctx, DATASERVICE_110, member.location(), scope, entity);
+                            }
+                        }
+                    }
                 }
             }
         }

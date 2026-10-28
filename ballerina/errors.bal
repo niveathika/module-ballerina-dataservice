@@ -23,6 +23,7 @@ public enum ErrorCode {
     CONFLICT,
     CONSTRAINT_VIOLATION,
     INVALID_INPUT,
+    FORBIDDEN,
     INTERNAL
 }
 
@@ -66,6 +67,17 @@ public isolated function toErrorBody(error err, string entity = "", KeyValue[] k
     logError(err, entity);
     return {code: INTERNAL, message: "An internal error occurred."};
 }
+
+# Builds the error body for a relation whose `read` scopes the entity's `read` scopes do not cover.
+#
+# + entity - The name of the entity
+# + relation - The relation field
+# + return - The `FORBIDDEN` error body
+public isolated function forbidden(string entity, string relation) returns DataserviceError => {
+    code: FORBIDDEN,
+    message: string `The relation '${relation}' of the entity '${entity}' needs 'read' scopes that the entity's ` +
+        string `'read' scopes do not cover.`
+};
 
 # Checks that every `float` value of a key is a finite number.
 #

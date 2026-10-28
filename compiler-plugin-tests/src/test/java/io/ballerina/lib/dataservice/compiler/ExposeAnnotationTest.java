@@ -81,6 +81,27 @@ public class ExposeAnnotationTest {
     }
 
     @Test
+    public void testInvalidScope() {
+        List<Diagnostic> errors = errors(loadModel("scope_invalid", "persist", "model.bal"));
+        Assert.assertEquals(errors.stream().map(Diagnostic::message).toList(), List.of(
+                "invalid scope '' in the @dataservice:Expose annotation of the entity 'Department'.",
+                "invalid scope 'hr admin' in the @dataservice:Expose annotation of the entity 'Department'."));
+        Assert.assertTrue(errors.stream().allMatch(error -> error.diagnosticInfo().code().equals("DATASERVICE_110")));
+    }
+
+    @Test
+    public void testScopesForAnActionNotEnabled() {
+        assertDiagnostic(errors(loadModel("scope_not_enabled", "persist", "model.bal")), "DATASERVICE_111",
+                "the @dataservice:Expose annotation of the entity 'Department' sets scopes for 'delete', which is " +
+                        "not in 'operations'.", 3);
+    }
+
+    @Test
+    public void testValidScopes() {
+        Assert.assertTrue(errors(loadModel("scopes_valid", "persist", "model.bal")).isEmpty());
+    }
+
+    @Test
     public void testEmptyOperationsRejectedByType() {
         List<Diagnostic> errors = errors(loadModel("empty_operations", "persist", "model.bal"));
         Assert.assertEquals(errors.size(), 1, errors.toString());
