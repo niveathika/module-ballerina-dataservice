@@ -22,6 +22,7 @@ import io.ballerina.compiler.api.symbols.RecordFieldSymbol;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.ArrayTypeDescriptorNode;
+import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
 import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.ListConstructorExpressionNode;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
@@ -35,13 +36,16 @@ import io.ballerina.compiler.syntax.tree.RecordTypeDescriptorNode;
 import io.ballerina.compiler.syntax.tree.SimpleNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
+import io.ballerina.compiler.syntax.tree.Token;
 import io.ballerina.compiler.syntax.tree.TypeDefinitionNode;
+import io.ballerina.compiler.syntax.tree.UnaryExpressionNode;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -206,7 +210,27 @@ public class FieldRuleValidator implements AnalysisTask<SyntaxNodeAnalysisContex
 
     private static boolean isSubtype(SemanticModel model, ExpressionNode expression, TypeSymbol type) {
         Optional<TypeSymbol> valueType = model.typeOf(expression);
-        return valueType.isPresent() && valueType.get().subtypeOf(type);
+        if (valueType.isPresent() && valueType.get().subtypeOf(type)) {
+            return true;
+        }
+        // The value is copied into the generated code as written, where a numeric literal takes the field's type.
+        Optional<Token> literal = numericLiteral(expression);
+        if (literal.isEmpty()) {
+            return false;
+        }
+        String text = literal.get().text().trim().toLowerCase(Locale.ROOT);
+        boolean integer = literal.get().kind() == SyntaxKind.DECIMAL_INTEGER_LITERAL_TOKEN
+                || literal.get().kind() == SyntaxKind.HEX_INTEGER_LITERAL_TOKEN;
+        boolean asFloat = integer || !text.endsWith("d");
+        boolean asDecimal = integer || !text.endsWith("f");
+        return (asFloat && model.types().FLOAT.subtypeOf(type)) || (asDecimal && model.types().DECIMAL.subtypeOf(type));
+    }
+
+    private static Optional<Token> numericLiteral(ExpressionNode expression) {
+        ExpressionNode inner = expression instanceof UnaryExpressionNode unary
+                && unary.unaryOperator().kind() == SyntaxKind.MINUS_TOKEN ? unary.expression() : expression;
+        return inner instanceof BasicLiteralNode literal && literal.kind() == SyntaxKind.NUMERIC_LITERAL ?
+                Optional.of(literal.literalToken()) : Optional.empty();
     }
 
     // Persist's rule: the array side never holds the key; in a one-to-one relation, the optional side does not.

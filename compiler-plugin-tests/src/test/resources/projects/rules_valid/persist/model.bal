@@ -15,6 +15,10 @@ type Employee record {|
     string? notes;
     @dataservice:Internal {value: 1}
     int tenantId;
+    @dataservice:ReadOnly {value: 8}
+    decimal hours;
+    @dataservice:ReadOnly {value: -1.5}
+    float rate;
     @dataservice:ReadOnly {value: 2}
     Department department;
     @dataservice:Immutable
