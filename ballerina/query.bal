@@ -63,11 +63,28 @@ public type Field record {|
 # + resource - The persist resource name of the entity
 # + datastore - The datastore of the entity
 # + fields - The fields that callers can see, in model order
+# + relations - The relations that callers can read
 public type Entity readonly & record {|
     string name;
     string 'resource;
     Datastore datastore;
     Field[] fields;
+    Relation[] relations = [];
+|};
+
+# A relation of an entity that callers can read.
+#
+# + field - The relation field
+# + many - Whether the relation is to-many
+# + fields - The fields of this entity that link it, in key order
+# + targetFields - The fields of the related entity that they match, in the same order
+# + target - The related entity, with its own fields and no relations
+public type Relation record {|
+    string 'field;
+    boolean many;
+    string[] fields;
+    string[] targetFields;
+    Entity target;
 |};
 
 # The clauses of a query for the persist SQL client.
@@ -108,8 +125,30 @@ type Filter Condition|Group;
 # + offset - The number of records to skip
 # + return - The query, an `INVALID_INPUT` error body, or a `ConversionError` for a value that does not parse
 public isolated function query(Entity entity, PageConfig config, map<map<anydata>>? filter = (),
-        string[]? sort = (), int? size = (), int? offset = ()) returns Query|DataserviceError|ConversionError {
-    Filter[] conditions = [];
+        string[]? sort = (), int? size = (), int? offset = ()) returns Query|DataserviceError|ConversionError =>
+    optionsQuery(entity, config, filter, sort, size, offset, []);
+
+# Validates the query options of get related and builds its query, which reads the records related to one record.
+#
+# + entity - The entity of the record
+# + relation - The relation field
+# + row - The record, holding at least the fields that link the relation
+# + config - The page sizes of the data service
+# + filter - The conditions on the related records
+# + sort - The field names of the related entity to sort by, each descending when it starts with `-`
+# + size - The page size
+# + offset - The number of records to skip
+# + return - The query, an `INVALID_INPUT` error body, or a `ConversionError` for a value that does not parse
+public isolated function relatedQuery(Entity entity, string relation, map<anydata> row, PageConfig config,
+        map<map<anydata>>? filter = (), string[]? sort = (), int? size = (), int? offset = ())
+        returns Query|DataserviceError|ConversionError {
+    Relation related = relationOf(entity, relation);
+    return optionsQuery(related.target, config, filter, sort, size, offset, [linkFilter(related, [row])]);
+}
+
+isolated function optionsQuery(Entity entity, PageConfig config, map<map<anydata>>? filter, string[]? sort,
+        int? size, int? offset, Filter[] links) returns Query|DataserviceError|ConversionError {
+    Filter[] conditions = [...links];
     if filter is map<map<anydata>> {
         foreach [string, map<anydata>] [name, operators] in filter.entries() {
             Field? 'field = findField(entity, name);
@@ -160,22 +199,8 @@ public isolated function query(Entity entity, PageConfig config, map<map<anydata
 # + return - The query
 public isolated function keysQuery(Entity entity, KeyValue[][] keys) returns Query {
     Field[] keyFields = from Field 'field in entity.fields where 'field.key select 'field;
-    Filter matches;
-    if keyFields.length() == 1 {
-        matches = {'field: keyFields[0], operator: "anyOf", values: from KeyValue[] key in keys select key[0]};
-    } else {
-        matches = {
-            matchAll: false,
-            filters: from KeyValue[] key in keys
-                select <Group>{
-                    matchAll: true,
-                    filters: from int i in 0 ..< keyFields.length()
-                        select <Condition>{'field: keyFields[i], operator: "eq", values: [key[i]]}
-                }
-        };
-    }
-        return {
-        whereClause: whereClause(entity, matches),
+    return {
+        whereClause: whereClause(entity, matchFilter(keyFields, keys)),
         orderByClause: <sql:ParameterizedQuery>orderByClause(entity, []),
         limitClause: ``,
         offsetClause: ``,
@@ -221,12 +246,94 @@ public isolated function page(anydata[] rows, Query query) returns boolean {
     return false;
 }
 
+# Builds the query that reads the related records of a relation named in `fields`: for a to-one relation, those of
+# every record of a page; for a to-many relation, those of one record, one more than `config.size` in key order.
+#
+# + entity - The entity of the records
+# + relation - The relation field
+# + sources - The records, holding at least the fields that link the relation
+# + config - The page sizes of the data service
+# + return - The query
+public isolated function includeQuery(Entity entity, string relation, map<anydata>[] sources, PageConfig config)
+        returns Query {
+    Relation related = relationOf(entity, relation);
+    int size = related.many ? config.size : sources.length();
+    return {
+        whereClause: whereClause(related.target, linkFilter(related, sources)),
+        orderByClause: <sql:ParameterizedQuery>orderByClause(related.target, []),
+        limitClause: related.many ? `${size + 1}` : ``,
+        offsetClause: ``,
+        size
+    };
+}
+
+# Tells whether `fields` names a relation, alone or with its fields.
+#
+# + fields - The field names to return
+# + relation - The relation field
+# + return - Whether the related records are included
+public isolated function includes(string[]? fields, string relation) returns boolean =>
+    fields is string[] && fields.some(name => name == relation || name.startsWith(relation + "."));
+
+# Adds the related record of a to-one relation to each narrowed record of a page, or nil when it has none.
+#
+# + partials - The narrowed records, which are changed in place
+# + sources - The records as read, in the same order
+# + entity - The entity of the records
+# + relation - The relation field
+# + related - The records that `includeQuery` read
+# + fields - The field names to return
+public isolated function attachOne(map<anydata>[] partials, map<anydata>[] sources, Entity entity, string relation,
+        map<anydata>[] related, string[] fields) {
+    Relation rel = relationOf(entity, relation);
+    string[] names = relatedFields(rel, fields);
+    foreach int i in 0 ..< partials.length() {
+        anydata[] link = from string name in rel.fields select sources[i][name];
+        map<anydata>? found = ();
+        foreach map<anydata> row in related {
+            if (from string name in rel.targetFields select row[name]) == link {
+                found = row;
+                break;
+            }
+        }
+        partials[i][rel.'field] = found is () ? () : narrow(found, rel.target, names);
+    }
+}
+
+# Adds the related records of a to-many relation to one narrowed record, as a list with `hasMore`.
+#
+# + partial - The narrowed record, which is changed in place
+# + entity - The entity of the record
+# + relation - The relation field
+# + related - The records that `includeQuery` read, cut to the page by `page`
+# + hasMore - Whether more related records exist
+# + fields - The field names to return
+public isolated function attachMany(map<anydata> partial, Entity entity, string relation, map<anydata>[] related,
+        boolean hasMore, string[] fields) {
+    Relation rel = relationOf(entity, relation);
+    string[] names = relatedFields(rel, fields);
+    partial[rel.'field] = {items: from map<anydata> row in related select narrow(row, rel.target, names), hasMore};
+}
+
+# Builds the error body for a to-one relation with no related record.
+#
+# + entity - The entity of the record
+# + relation - The relation field
+# + key - The values of the record's key fields, in key order
+# + return - The `NOT_FOUND` error body
+public isolated function noRelated(Entity entity, string relation, KeyValue[] key) returns DataserviceError => {
+    code: NOT_FOUND,
+    message: string `The record with the key '${keyText(key)}' of the entity '${entity.name}' has no '${relation}'.`
+};
+
 # Checks the `fields` option of a read.
 #
 # + entity - The entity to read
 # + fields - The field names to return
+# + relations - Whether `fields` can name the entity's relations and their fields, such as `department.name`
 # + return - An `INVALID_INPUT` error body when `fields` is empty or names a field that cannot be returned
-public isolated function checkFields(Entity entity, string[]? fields) returns DataserviceError? {
+public isolated function checkFields(Entity entity, string[]? fields, boolean relations = true)
+        returns DataserviceError? {
     if fields is () {
         return ();
     }
@@ -235,7 +342,11 @@ public isolated function checkFields(Entity entity, string[]? fields) returns Da
         return invalidInput("'fields' must name at least one field.");
     }
     foreach string name in names {
-        if findField(entity, name) is () {
+        int? dot = name.indexOf(".");
+        Relation? related = relations ? findRelation(entity, dot is int ? name.substring(0, dot) : name) : ();
+        boolean usable = dot is int ? related is Relation && findField(related.target, name.substring(dot + 1)) !is ()
+            : findField(entity, name) !is () || related is Relation;
+        if !usable {
             return unusable(entity, name, "fields");
         }
     }
@@ -256,6 +367,59 @@ public isolated function narrow(map<anydata> value, Entity entity, string[] fiel
         }
     }
     return narrowed;
+}
+
+isolated function relatedFields(Relation relation, string[] fields) returns string[] {
+    if fields.indexOf(relation.'field) !is () {
+        return from Field 'field in relation.target.fields select 'field.name;
+    }
+    string prefix = relation.'field + ".";
+    return from string name in fields where name.startsWith(prefix) select name.substring(prefix.length());
+}
+
+// Matches the related records of the sources; a source whose link has a nil value has none.
+isolated function linkFilter(Relation relation, map<anydata>[] sources) returns Filter {
+    Field[] targetFields = from string name in relation.targetFields select <Field>findField(relation.target, name);
+    KeyValue[][] links = [];
+    foreach map<anydata> item in sources {
+        anydata[] link = from string name in relation.fields select item[name];
+        if link.every(value => value is KeyValue) {
+            links.push(from anydata value in link select <KeyValue>value);
+        }
+    }
+    return matchFilter(targetFields, links);
+}
+
+isolated function matchFilter(Field[] fields, KeyValue[][] tuples) returns Filter {
+    if fields.length() == 1 {
+        return {'field: fields[0], operator: "anyOf", values: from KeyValue[] tuple in tuples select tuple[0]};
+    }
+    return {
+        matchAll: false,
+        filters: from KeyValue[] tuple in tuples
+            select <Group>{
+                matchAll: true,
+                filters: from int i in 0 ..< fields.length()
+                    select <Condition>{'field: fields[i], operator: "eq", values: [tuple[i]]}
+            }
+    };
+}
+
+isolated function relationOf(Entity entity, string name) returns Relation {
+    Relation? relation = findRelation(entity, name);
+    if relation is () {
+        panic error(string `The entity '${entity.name}' has no relation '${name}'.`);
+    }
+    return relation;
+}
+
+isolated function findRelation(Entity entity, string name) returns Relation? {
+    foreach Relation relation in entity.relations {
+        if relation.'field == name {
+            return relation;
+        }
+    }
+    return ();
 }
 
 isolated function toCondition(Entity entity, Field 'field, string operator, anydata value)
@@ -357,13 +521,16 @@ isolated function fieldError(ConversionError err, Field 'field) returns Conversi
     error ConversionError(err.message(), err.cause(), format = err.detail().format, 'field = 'field.name);
 
 isolated function whereClause(Entity entity, Filter filter) returns sql:ParameterizedQuery {
-    if filter is Group && filter.filters.length() == 0 {
+    if filter is Group && filter.matchAll && filter.filters.length() == 0 {
         return ``;
     }
     return filterSql(entity, filter);
 }
 
 isolated function filterSql(Entity entity, Filter filter) returns sql:ParameterizedQuery {
+    if filter is Group && filter.filters.length() == 0 {
+        return filter.matchAll ? `1 = 1` : `1 = 0`;
+    }
     if filter is Group {
         sql:ParameterizedQuery joined = `(`;
         foreach int i in 0 ..< filter.filters.length() {

@@ -37,6 +37,7 @@ the specification is considered a bug.
     * [7.2. Query options](#72-query-options)
     * [7.3. Reading by keys](#73-reading-by-keys)
     * [7.4. Fields](#74-fields)
+    * [7.5. Relations](#75-relations)
 
 ## 1. The `Expose` annotation
 
@@ -314,12 +315,26 @@ public type Entity readonly & record {|
     string 'resource;
     Datastore datastore;
     Field[] fields;
+    Relation[] relations = [];
+|};
+
+public type Relation record {|
+    string 'field;
+    boolean many;
+    string[] fields;
+    string[] targetFields;
+    Entity target;
 |};
 ```
 
 The generated service holds one `Entity` per exposed entity. `fields` holds, in model order, the fields that callers
 can see; a field with the `Internal` rule is left out, so no query option can use it. `name` is the entity name, which
 the persist SQL client also uses as the table alias, and `column` is the field's column name.
+
+`relations` holds the relations that callers can read: those whose related entity is also read by the service and
+that no `Internal` rule hides. `fields` and `targetFields` pair the fields that link the two entities: the foreign key
+fields and the related entity's key on the owning side, and the key and the related entity's foreign key fields on the
+other side. `target` describes the related entity with its own fields and no relations, so every read is one hop.
 
 ### 7.2. Query options
 
@@ -394,7 +409,42 @@ public isolated function checkFields(Entity entity, string[]? fields) returns Da
 public isolated function narrow(map<anydata> value, Entity entity, string[] fields) returns map<anydata>;
 ```
 
-`checkFields` returns an `INVALID_INPUT` error body when `fields` names no field, with the message
+`checkFields(entity, fields, relations = true)` returns an `INVALID_INPUT` error body when `fields` names no field, with
+the message
 `'fields' must name at least one field.`, or names a field that is not in the description, with the message
-`The field '<field>' of the entity '<Entity>' cannot be used in 'fields'.`. Empty names are ignored. `narrow` keeps
-the key fields and the named fields of a record, in model order. A record is read in full and then narrowed.
+`The field '<field>' of the entity '<Entity>' cannot be used in 'fields'.`. Empty names are ignored. With
+`relations`, `fields` can also name a relation, which includes the whole related record, or a field of the related
+entity as `<relation>.<field>`. A relation of the related entity, such as `department.employees`, cannot be named.
+`narrow` keeps the key fields and the named fields of a record, in model order. A record is read in full and then
+narrowed.
+
+### 7.5. Relations
+
+```ballerina
+public isolated function relatedQuery(Entity entity, string relation, map<anydata> row, PageConfig config,
+        map<map<anydata>>? filter = (), string[]? sort = (), int? size = (), int? offset = ())
+        returns Query|DataserviceError|ConversionError;
+public isolated function noRelated(Entity entity, string relation, KeyValue[] key) returns DataserviceError;
+public isolated function includes(string[]? fields, string relation) returns boolean;
+public isolated function includeQuery(Entity entity, string relation, map<anydata>[] sources, PageConfig config)
+        returns Query;
+public isolated function attachOne(map<anydata>[] partials, map<anydata>[] sources, Entity entity, string relation,
+        map<anydata>[] related, string[] fields);
+public isolated function attachMany(map<anydata> partial, Entity entity, string relation, map<anydata>[] related,
+        boolean hasMore, string[] fields);
+```
+
+- **Get related:** `relatedQuery` reads the records related to `row`, which holds the fields that link the relation:
+  the foreign key on the owning side, or the key on the other side. It takes the query options of
+  [7.2](#72-query-options) on the related entity, and its errors name the related entity. A link with a nil value
+  matches no record.
+- **Empty to-one:** `noRelated` returns the `NOT_FOUND` body
+  `The record with the key '<key>' of the entity '<Entity>' has no '<relation>'.`
+- **Relations in `fields`:** `includes` tells whether `fields` names a relation. For a to-one relation,
+  `includeQuery` reads the related records of a whole page with one query whose filter is `anyOf` their links, and
+  `attachOne` adds each record's related record to its narrowed record, or nil when there is none. For a to-many
+  relation, `includeQuery` reads the related records of one record, `config.size` plus one in key order, `page` cuts
+  them, and `attachMany` adds them as `{"items": [...], "hasMore": ...}`. The related records are narrowed to the
+  `<relation>.<field>` names, or kept whole when the relation is named alone.
+- **Composite links** match as `OR` over the link tuples.
+

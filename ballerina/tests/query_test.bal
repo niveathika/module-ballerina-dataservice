@@ -267,3 +267,165 @@ function testNarrow() {
     map<anydata> employee = {id: 1, name: "Ann", email: (), hiredOn: "2024-01-02", status: "ACTIVE", rate: 1d};
     test:assertEquals(narrow(employee, employeeEntity(), ["email", "name", "name"]), {id: 1, name: "Ann", email: ()});
 }
+
+final Entity departmentOwn = {
+    name: "Department",
+    'resource: "departments",
+    datastore: H2,
+    fields: [{name: "id", column: "id", 'type: INT, key: true}, {name: "name", column: "name", 'type: STRING}]
+};
+
+final Entity employeeOwn = {
+    name: "Employee",
+    'resource: "employees",
+    datastore: H2,
+    fields: [
+        {name: "id", column: "id", 'type: INT, key: true},
+        {name: "name", column: "name", 'type: STRING},
+        {name: "departmentId", column: "department_id", 'type: INT, nullable: true}
+    ]
+};
+
+final Entity employeeWithDepartment = {
+    name: "Employee",
+    'resource: "employees",
+    datastore: H2,
+    fields: employeeOwn.fields,
+    relations: [
+        {'field: "department", many: false, fields: ["departmentId"], targetFields: ["id"], target: departmentOwn}
+    ]
+};
+
+final Entity departmentWithEmployees = {
+    name: "Department",
+    'resource: "departments",
+    datastore: H2,
+    fields: departmentOwn.fields,
+    relations: [
+        {'field: "employees", many: true, fields: ["id"], targetFields: ["departmentId"], target: employeeOwn}
+    ]
+};
+
+final Entity projectWithAssignments = {
+    name: "Assignment",
+    'resource: "assignments",
+    datastore: H2,
+    fields: assignment.fields,
+    relations: [
+        {
+            'field: "notes",
+            many: true,
+            fields: ["projectCode", "seq"],
+            targetFields: ["code", "seq"],
+            target: {
+                name: "Note",
+                'resource: "notes",
+                datastore: H2,
+                fields: [
+                    {name: "id", column: "id", 'type: INT, key: true},
+                    {name: "code", column: "code", 'type: STRING},
+                    {name: "seq", column: "seq", 'type: INT}
+                ]
+            }
+        }
+    ]
+};
+
+@test:Config
+function testRelatedQueryToOne() returns error? {
+    Query query = check relatedQuery(employeeWithDepartment, "department", {id: 4, departmentId: 2}, pages).ensureType();
+    test:assertEquals(sqlText(query.whereClause), "(\"Department\".\"id\" IN (?))");
+    test:assertEquals(query.whereClause.insertions, [2]);
+    test:assertEquals(sqlText(query.orderByClause), "\"Department\".\"id\" ASC");
+    query = check relatedQuery(employeeWithDepartment, "department", {id: 4, departmentId: ()}, pages).ensureType();
+    test:assertEquals(sqlText(query.whereClause), "(1 = 0)");
+}
+
+@test:Config
+function testRelatedQueryToManyWithOptions() returns error? {
+    Query query = check relatedQuery(departmentWithEmployees, "employees", {id: 2}, pages,
+            {name: {startsWith: "A"}}, ["-name"], 10, 20).ensureType();
+    test:assertEquals(sqlText(query.whereClause),
+            "(\"Employee\".\"department_id\" IN (?) AND \"Employee\".\"name\" LIKE ? ESCAPE '!')");
+    test:assertEquals(query.whereClause.insertions, [2, "A%"]);
+    test:assertEquals(sqlText(query.orderByClause), "\"Employee\".\"name\" DESC, \"Employee\".\"id\" ASC");
+    test:assertEquals(query.limitClause.insertions, [11]);
+    test:assertEquals(query.offsetClause.insertions, [20]);
+    Query|DataserviceError|ConversionError invalid = relatedQuery(departmentWithEmployees, "employees", {id: 2},
+            pages, sort = ["salary"]);
+    test:assertEquals(invalid is DataserviceError ? invalid.message : "",
+            "The field 'salary' of the entity 'Employee' cannot be used in 'sort'.");
+}
+
+@test:Config
+function testIncludeQueries() {
+    Query query = includeQuery(employeeWithDepartment, "department", [{departmentId: 2}, {departmentId: ()},
+        {departmentId: 3}], pages);
+    test:assertEquals(sqlText(query.whereClause), "\"Department\".\"id\" IN (?, ?)");
+    test:assertEquals(query.whereClause.insertions, [2, 3]);
+    test:assertEquals(sqlText(query.limitClause), "");
+    query = includeQuery(employeeWithDepartment, "department", [{departmentId: ()}], pages);
+    test:assertEquals(sqlText(query.whereClause), "1 = 0");
+    query = includeQuery(departmentWithEmployees, "employees", [{id: 2}], pages);
+    test:assertEquals(sqlText(query.whereClause), "\"Employee\".\"department_id\" IN (?)");
+    test:assertEquals(query.limitClause.insertions, [101]);
+    test:assertEquals(query.size, 100);
+    query = includeQuery(projectWithAssignments, "notes", [{projectCode: "P1", seq: 2}], pages);
+    test:assertEquals(sqlText(query.whereClause), "((\"Note\".\"code\" = ? AND \"Note\".\"seq\" = ?))");
+    query = includeQuery(projectWithAssignments, "notes", [], pages);
+    test:assertEquals(sqlText(query.whereClause), "1 = 0");
+}
+
+@test:Config
+function testIncludes() {
+    test:assertTrue(includes(["name", "department"], "department"));
+    test:assertTrue(includes(["department.name"], "department"));
+    test:assertFalse(includes(["departmentId"], "department"));
+    test:assertFalse(includes((), "department"));
+}
+
+@test:Config
+function testAttach() {
+    map<anydata>[] sources = [{id: 4, name: "Ann", departmentId: 2}, {id: 5, name: "Bob", departmentId: ()},
+        {id: 6, name: "Cy", departmentId: 9}];
+    map<anydata>[] partials = from map<anydata> row in sources select narrow(row, employeeOwn, ["name"]);
+    attachOne(partials, sources, employeeWithDepartment, "department", [{id: 2, name: "Research"}],
+            ["name", "department.name"]);
+    test:assertEquals(partials, [
+        {id: 4, name: "Ann", department: {id: 2, name: "Research"}},
+        {id: 5, name: "Bob", department: ()},
+        {id: 6, name: "Cy", department: ()}
+    ]);
+    map<anydata> department = {id: 2};
+    attachMany(department, departmentWithEmployees, "employees", [{id: 4, name: "Ann", departmentId: 2}], true,
+            ["employees"]);
+    test:assertEquals(department, {id: 2, employees: {items: [{id: 4, name: "Ann", departmentId: 2}], hasMore: true}});
+    department = {id: 2};
+    attachMany(department, departmentWithEmployees, "employees", [{id: 4, name: "Ann", departmentId: 2}], false,
+            ["employees.name"]);
+    test:assertEquals(department, {id: 2, employees: {items: [{id: 4, name: "Ann"}], hasMore: false}});
+}
+
+@test:Config
+function testNoRelated() {
+    test:assertEquals(noRelated(employeeWithDepartment, "department", [4]), <DataserviceError>{
+        code: NOT_FOUND,
+        message: "The record with the key '4' of the entity 'Employee' has no 'department'."
+    });
+}
+
+@test:Config
+function testCheckFieldsWithRelations() {
+    test:assertEquals(checkFields(employeeWithDepartment, ["name", "department", "department.name"]), ());
+    string[][] invalid = [["department.salary"], ["department.employees"], ["manager"], ["name.first"]];
+    foreach string[] fields in invalid {
+        test:assertEquals(checkFields(employeeWithDepartment, fields), <DataserviceError>{
+            code: INVALID_INPUT,
+            message: string `The field '${fields[0]}' of the entity 'Employee' cannot be used in 'fields'.`
+        });
+    }
+    test:assertEquals(checkFields(employeeWithDepartment, ["department"], false), <DataserviceError>{
+        code: INVALID_INPUT,
+        message: "The field 'department' of the entity 'Employee' cannot be used in 'fields'."
+    });
+}
