@@ -21,6 +21,7 @@
     <test name="Dataservice Compiler Plugin Tests" parallel="false">
         <classes>
             <class name="io.ballerina.lib.dataservice.compiler.ExposeAnnotationTest"/>
+            <class name="io.ballerina.lib.dataservice.compiler.FieldRuleTest"/>
         </classes>
     </test>
 </suite>

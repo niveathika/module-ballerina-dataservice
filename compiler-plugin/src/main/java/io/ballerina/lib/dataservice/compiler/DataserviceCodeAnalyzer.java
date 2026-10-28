@@ -25,7 +25,7 @@ import io.ballerina.projects.plugins.CodeAnalyzer;
 import java.util.List;
 
 /**
- * Registers the validation of the `@dataservice:Expose` annotation.
+ * Registers the validation of the `@dataservice:Expose` annotation and the field rules.
  */
 public class DataserviceCodeAnalyzer extends CodeAnalyzer {
 
@@ -33,5 +33,6 @@ public class DataserviceCodeAnalyzer extends CodeAnalyzer {
     public void init(CodeAnalysisContext context) {
         context.addSyntaxNodeAnalysisTask(new ExposeAnnotationValidator(),
                 List.of(SyntaxKind.TYPE_DEFINITION, SyntaxKind.ENUM_DECLARATION, SyntaxKind.CLASS_DEFINITION));
+        context.addSyntaxNodeAnalysisTask(new FieldRuleValidator(), SyntaxKind.TYPE_DEFINITION);
     }
 }

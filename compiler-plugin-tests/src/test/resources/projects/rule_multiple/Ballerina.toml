@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "rule_multiple"
+version = "0.1.0"

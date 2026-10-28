@@ -89,7 +89,7 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
     }
 
     // Matches persist's own rule: persist/<file> or persist/<model>/<file> of a package.
-    private static boolean isPersistModel(SyntaxNodeAnalysisContext ctx) {
+    static boolean isPersistModel(SyntaxNodeAnalysisContext ctx) {
         try {
             if (ctx.currentPackage().project().kind() != ProjectKind.SINGLE_FILE_PROJECT) {
                 return false;
@@ -110,13 +110,41 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
     }
 
     private static boolean isExposeAnnotation(Optional<? extends Symbol> symbol) {
+        return isAnnotation(symbol, ORG_NAME, MODULE_NAME, EXPOSE_ANNOTATION);
+    }
+
+    static boolean isAnnotation(Optional<? extends Symbol> symbol, String org, String module, String name) {
         if (symbol.isEmpty() || !(symbol.get() instanceof AnnotationSymbol annotationSymbol)) {
             return false;
         }
-        Optional<ModuleSymbol> module = annotationSymbol.getModule();
-        return module.isPresent() && ORG_NAME.equals(module.get().id().orgName())
-                && MODULE_NAME.equals(module.get().id().moduleName())
-                && annotationSymbol.getName().map(EXPOSE_ANNOTATION::equals).orElse(false);
+        Optional<ModuleSymbol> moduleSymbol = annotationSymbol.getModule();
+        return moduleSymbol.isPresent() && org.equals(moduleSymbol.get().id().orgName())
+                && module.equals(moduleSymbol.get().id().moduleName())
+                && annotationSymbol.getName().map(name::equals).orElse(false);
+    }
+
+    // The actions an Expose annotation allows, every action when it gives no list.
+    static Set<String> exposedOperations(SyntaxNodeAnalysisContext ctx, MetadataNode metadata) {
+        for (AnnotationNode annotation : metadata.annotations()) {
+            if (!isExposeAnnotation(ctx.semanticModel().symbol(annotation))) {
+                continue;
+            }
+            if (annotation.annotValue().isEmpty()) {
+                return OPERATIONS;
+            }
+            for (MappingFieldNode field : annotation.annotValue().get().fields()) {
+                if (field instanceof SpecificFieldNode specificField
+                        && OPERATIONS_FIELD.equals(specificField.fieldName().toSourceCode().trim())
+                        && specificField.valueExpr().isPresent()
+                        && specificField.valueExpr().get() instanceof ListConstructorExpressionNode list) {
+                    Set<String> operations = new HashSet<>();
+                    list.expressions().forEach(member -> operationValue(member).ifPresent(operations::add));
+                    return operations;
+                }
+            }
+            return OPERATIONS;
+        }
+        return Set.of();
     }
 
     private static void reportDuplicates(SyntaxNodeAnalysisContext ctx, AnnotationNode annotation, String entity) {
@@ -153,7 +181,7 @@ public class ExposeAnnotationValidator implements AnalysisTask<SyntaxNodeAnalysi
         return Optional.empty();
     }
 
-    private static void report(SyntaxNodeAnalysisContext ctx, DiagnosticCodes code, Location location,
+    static void report(SyntaxNodeAnalysisContext ctx, DiagnosticCodes code, Location location,
                                Object... args) {
         DiagnosticInfo info = new DiagnosticInfo(code.getCode(), code.getMessage(), code.getSeverity());
         ctx.reportDiagnostic(DiagnosticFactory.createDiagnostic(info, location, args));
