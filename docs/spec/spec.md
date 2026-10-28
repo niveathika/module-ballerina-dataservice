@@ -32,6 +32,11 @@ the specification is considered a bug.
 * [4. Compiler plugin](#4-compiler-plugin)
 * [5. Paging](#5-paging)
 * [6. Field rules](#6-field-rules)
+* [7. Queries](#7-queries)
+    * [7.1. The entity description](#71-the-entity-description)
+    * [7.2. Query options](#72-query-options)
+    * [7.3. Reading by keys](#73-reading-by-keys)
+    * [7.4. Fields](#74-fields)
 
 ## 1. The `Expose` annotation
 
@@ -152,6 +157,7 @@ uses the following functions, so that every protocol uses the same formats.
 ```ballerina
 public type ConversionErrorDetail record {|
     string format;
+    string 'field?;
 |};
 
 public type ConversionError distinct error<ConversionErrorDetail>;
@@ -167,7 +173,8 @@ public type ConversionError distinct error<ConversionErrorDetail>;
 
 Each `<type>ToString` function takes a value of the type and returns its string form. Each `<type>FromString` function
 takes a string and returns a value of the type, or a `ConversionError` whose message is `The value is not <format>.`
-and whose detail holds the format.
+and whose detail holds the format. A `ConversionError` for a value of a query option also holds the field the value is
+given for; see [7.2](#72-query-options).
 
 - **`byte[]`:** the string must use the standard alphabet and padding. An unpadded string is a `ConversionError`.
 - **`time:Date`:** written as `YYYY-MM-DD`. The string must be a valid calendar date.
@@ -262,3 +269,132 @@ A field rule on a model field says what a data service does with the field:
 The service sets a `ReadOnly` or `Internal` field on create to the annotation's `value`, or to `()` without one. On
 the relation field that holds a foreign key, the rule applies to the foreign key fields, and `value` is the related
 entity's key, a tuple in key order for a composite key. On the other side of a relation, only `Internal` applies.
+
+## 7. Queries
+
+A data service reads records through the persist SQL client's `whereClause`, `orderByClause`, `limitClause` and
+`offsetClause`. This module validates the query options of a read and writes those clauses from a description of the
+entity. Values are bound as parameters; field and column names come only from the description.
+
+### 7.1. The entity description
+
+```ballerina
+public enum Datastore {
+    MYSQL,
+    MSSQL,
+    POSTGRESQL,
+    H2
+}
+
+public enum FieldType {
+    INT,
+    FLOAT,
+    DECIMAL,
+    STRING,
+    BOOLEAN,
+    ENUM,
+    BYTES,
+    DATE,
+    TIME_OF_DAY,
+    CIVIL,
+    UTC
+}
+
+public type Field record {|
+    string name;
+    string column;
+    FieldType 'type;
+    boolean nullable = false;
+    boolean key = false;
+    boolean generated = false;
+|};
+
+public type Entity readonly & record {|
+    string name;
+    string 'resource;
+    Datastore datastore;
+    Field[] fields;
+|};
+```
+
+The generated service holds one `Entity` per exposed entity. `fields` holds, in model order, the fields that callers
+can see; a field with the `Internal` rule is left out, so no query option can use it. `name` is the entity name, which
+the persist SQL client also uses as the table alias, and `column` is the field's column name.
+
+### 7.2. Query options
+
+```ballerina
+public type Query record {|
+    sql:ParameterizedQuery whereClause;
+    sql:ParameterizedQuery orderByClause;
+    sql:ParameterizedQuery limitClause;
+    sql:ParameterizedQuery offsetClause;
+    int size;
+|};
+
+public isolated function query(Entity entity, PageConfig config, map<map<anydata>>? filter = (),
+        string[]? sort = (), int? size = (), int? offset = ()) returns Query|DataserviceError|ConversionError;
+public isolated function page(anydata[] rows, Query query) returns boolean;
+```
+
+`query` validates the options and returns the clauses to pass to the persist client.
+
+- **Filter:** a map from field name to a map from operator to value. Every condition must hold. A field of type
+  `BYTES` cannot be filtered.
+
+  | Operator | SQL | Field types |
+  |---|---|---|
+  | `eq`, `ne` | `=`, `<>` | every type but `BYTES` |
+  | `lt`, `lte`, `gt`, `gte` | `<`, `<=`, `>`, `>=` | every type but `BYTES`, `BOOLEAN` and `ENUM` |
+  | `anyOf` | `IN (...)`; an empty list matches no record | every type but `BYTES` |
+  | `contains`, `startsWith` | `LIKE` with `ESCAPE '!'` | `STRING` |
+  | `isNull` | `IS NULL` for `true`, `IS NOT NULL` for `false` | nullable fields |
+
+  A value of a `DATE`, `TIME_OF_DAY`, `CIVIL` or `UTC` field is the string form of [3](#3-value-conversions). In
+  `contains` and `startsWith`, `%`, `_` and `!` match themselves, as does `[` on MSSQL.
+- **Sort:** field names, each descending when it starts with `-`. The key fields not named are added in ascending
+  order, so the order is total. Nulls sort last in ascending order and first in descending order: with
+  `NULLS LAST` and `NULLS FIRST` on PostgreSQL and H2, and with a `CASE WHEN ... IS NULL` term on MySQL and MSSQL. An
+  empty name is ignored.
+- **Size:** `config.size` when not given, and `config.maxSize` when larger. `limitClause` reads one row more than the
+  page, and `page` removes that row from the rows read and returns whether it was there.
+- **Offset:** `0` when not given, in which case `offsetClause` is empty.
+- **Identifiers:** written as `` `name` `` on MySQL, `[name]` on MSSQL and `"name"` on PostgreSQL and H2, with the
+  quote character doubled inside a name, and qualified by the entity name.
+
+`query` returns an `INVALID_INPUT` error body for invalid options:
+
+| Case | Message |
+|---|---|
+| An unknown field, or one that cannot be used for the option | `The field '<field>' of the entity '<Entity>' cannot be used in '<filter\|sort>'.` |
+| An operator that does not apply to the field's type | `The operator '<operator>' cannot be used on the field '<field>' of the entity '<Entity>'.` |
+| A field named more than once in `sort` | `The field '<field>' is named more than once in 'sort'.` |
+| A size below 1 | `The page size must be at least 1.` |
+| An offset below 0 | `The offset must be at least 0.` |
+| An offset for which `offset + size` exceeds the largest integer | `The offset and the page size together exceed the largest integer.` |
+
+A filter value that does not parse, or is not of the field's type, is returned as a `ConversionError` whose detail
+holds the field name, so that a protocol writes its own message for it.
+
+### 7.3. Reading by keys
+
+```ballerina
+public isolated function keysQuery(Entity entity, KeyValue[][] keys) returns Query;
+public isolated function orderByKeys(map<anydata>[] rows, Entity entity, KeyValue[][] keys) returns error?;
+```
+
+`keysQuery` returns the query that reads the records with the given keys, in key order, without a limit. A single key
+matches with `IN`; a composite key matches with `OR` over the key tuples. A create reads its records back with it, and
+`orderByKeys` then puts them in the order of the given keys, in place. It returns an error when a key has no record.
+
+### 7.4. Fields
+
+```ballerina
+public isolated function checkFields(Entity entity, string[]? fields) returns DataserviceError?;
+public isolated function narrow(map<anydata> value, Entity entity, string[] fields) returns map<anydata>;
+```
+
+`checkFields` returns an `INVALID_INPUT` error body when `fields` names no field, with the message
+`'fields' must name at least one field.`, or names a field that is not in the description, with the message
+`The field '<field>' of the entity '<Entity>' cannot be used in 'fields'.`. Empty names are ignored. `narrow` keeps
+the key fields and the named fields of a record, in model order. A record is read in full and then narrowed.

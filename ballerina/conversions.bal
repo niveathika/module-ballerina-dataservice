@@ -29,8 +29,10 @@ final regexp:RegExp TIME_PATTERN = re `(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)`;
 # The detail of a `ConversionError`.
 #
 # + format - The format the value is not in, such as `an ISO 8601 date`
+# + field - The field the value is given for, when it is a value of a query option
 public type ConversionErrorDetail record {|
     string format;
+    string 'field?;
 |};
 
 # Represents a value that is not in the JSON format of its type.
