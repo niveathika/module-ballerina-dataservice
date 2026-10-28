@@ -26,3 +26,19 @@ function testExposeConfigDefaultsToEveryAction() {
 function testOperationValues() {
     test:assertEquals([READ, CREATE, UPDATE, DELETE], ["read", "create", "update", "delete"]);
 }
+
+type Order record {|
+    readonly int id;
+    @Immutable
+    int customerId;
+    @ReadOnly {value: "pending"}
+    string status;
+    @Internal
+    string? internalNotes;
+|};
+
+@test:Config
+function testFieldRulesOnARecord() {
+    Order 'order = {id: 1, customerId: 2, status: "pending", internalNotes: ()};
+    test:assertEquals('order.status, "pending");
+}
