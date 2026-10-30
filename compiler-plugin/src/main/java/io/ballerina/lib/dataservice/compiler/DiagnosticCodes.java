@@ -41,15 +41,17 @@ public enum DiagnosticCodes {
     DATASERVICE_106("DATASERVICE_106",
             "the ''value'' in @dataservice:{0} of the field ''{1}'' of the entity ''{2}'' is not a ''{3}''.", ERROR),
     DATASERVICE_107("DATASERVICE_107", "@dataservice:{0} cannot be used on the relation field ''{1}'' of the " +
-            "entity ''{2}'', which has no foreign key.", ERROR),
-    DATASERVICE_108("DATASERVICE_108", "@dataservice:{0} cannot be used on the foreign key field ''{1}'' of the " +
-            "entity ''{2}''. Use it on the relation field ''{3}''.", ERROR),
+            "entity ''{2}''. Use it on the foreign key field, declared with @sql:Relation.", ERROR),
+    DATASERVICE_108("DATASERVICE_108", "the foreign key fields of the relation ''{0}'' of the entity ''{1}'' " +
+            "must have the same field rule.", ERROR),
     DATASERVICE_109("DATASERVICE_109", "@dataservice:{0} on the field ''{1}'' of the entity ''{2}'' has no " +
             "effect, because the entity does not allow ''{3}''.", WARNING),
     DATASERVICE_110("DATASERVICE_110",
             "invalid scope ''{0}'' in the @dataservice:Expose annotation of the entity ''{1}''.", ERROR),
     DATASERVICE_111("DATASERVICE_111", "the @dataservice:Expose annotation of the entity ''{0}'' sets scopes " +
-            "for ''{1}'', which is not in ''operations''.", ERROR);
+            "for ''{1}'', which is not in ''operations''.", ERROR),
+    DATASERVICE_112("DATASERVICE_112", "@dataservice:{0} cannot be used on the foreign key field ''{1}'' of the " +
+            "entity ''{2}'', because its relation is one to one and every create would set the same value.", ERROR);
 
     private final String code;
     private final String message;

@@ -69,13 +69,17 @@ public class FieldRuleTest {
                         "'value' in @dataservice:Internal, because it is neither nullable nor generated."},
                 {"rule_value_type", "DATASERVICE_106", "the 'value' in @dataservice:ReadOnly of the field 'name' " +
                         "of the entity 'Employee' is not a 'string'."},
-                {"rule_relation_value_type", "DATASERVICE_106", "the 'value' in @dataservice:ReadOnly of the " +
-                        "field 'department' of the entity 'Employee' is not a 'int'."},
+                {"rule_relation_field", "DATASERVICE_107", "@dataservice:Immutable cannot be used on the " +
+                        "relation field 'department' of the entity 'Employee'. Use it on the foreign key field, " +
+                        "declared with @sql:Relation."},
                 {"rule_no_foreign_key", "DATASERVICE_107", "@dataservice:ReadOnly cannot be used on the relation " +
-                        "field 'employees' of the entity 'Department', which has no foreign key."},
-                {"rule_declared_foreign_key", "DATASERVICE_108", "@dataservice:Immutable cannot be used on the " +
-                        "foreign key field 'deptId' of the entity 'Employee'. Use it on the relation field " +
-                        "'department'."},
+                        "field 'employees' of the entity 'Department'. Use it on the foreign key field, declared " +
+                        "with @sql:Relation."},
+                {"rule_foreign_key_mixed", "DATASERVICE_108", "the foreign key fields of the relation 'slot' of " +
+                        "the entity 'Employee' must have the same field rule."},
+                {"rule_one_to_one", "DATASERVICE_112", "@dataservice:ReadOnly cannot be used on the foreign key " +
+                        "field 'employeeId' of the entity 'Profile', because its relation is one to one and every " +
+                        "create would set the same value."},
         };
     }
 
@@ -87,6 +91,16 @@ public class FieldRuleTest {
         Assert.assertEquals(warnings.get(0).diagnosticInfo().code(), "DATASERVICE_109");
         Assert.assertEquals(warnings.get(0).message(), "@dataservice:ReadOnly on the field 'name' of the entity " +
                 "'Employee' has no effect, because the entity does not allow 'create' or 'update'.");
+    }
+
+    @Test
+    public void testRelationNoEffectWarning() {
+        Assert.assertEquals(diagnostics("rule_relation_no_effect", DiagnosticSeverity.ERROR), List.of());
+        List<Diagnostic> warnings = diagnostics("rule_relation_no_effect", DiagnosticSeverity.WARNING);
+        Assert.assertEquals(warnings.size(), 1, warnings.toString());
+        Assert.assertEquals(warnings.get(0).diagnosticInfo().code(), "DATASERVICE_109");
+        Assert.assertEquals(warnings.get(0).message(), "@dataservice:Internal on the field 'department' of the " +
+                "entity 'Employee' has no effect, because the entity does not allow 'read'.");
     }
 
     private static List<Diagnostic> diagnostics(String project, DiagnosticSeverity severity) {

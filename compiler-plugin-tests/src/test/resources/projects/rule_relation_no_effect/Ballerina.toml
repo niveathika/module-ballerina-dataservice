@@ -1,4 +1,4 @@
 [package]
 org = "dataservice_test"
-name = "rule_relation_value_type"
+name = "rule_relation_no_effect"
 version = "0.1.0"

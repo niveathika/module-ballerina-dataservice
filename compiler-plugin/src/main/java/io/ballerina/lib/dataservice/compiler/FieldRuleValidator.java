@@ -44,6 +44,7 @@ import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +58,7 @@ import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_107;
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_108;
 import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_109;
+import static io.ballerina.lib.dataservice.compiler.DiagnosticCodes.DATASERVICE_112;
 
 /**
  * Validates the field rules `@dataservice:ReadOnly`, `@dataservice:Immutable` and `@dataservice:Internal` of a
@@ -90,6 +92,10 @@ public class FieldRuleValidator implements AnalysisTask<SyntaxNodeAnalysisContex
         Set<String> operations = type.metadata()
                 .map(metadata -> ExposeAnnotationValidator.exposedOperations(ctx, metadata)).orElse(Set.of());
         Map<String, Integer> relationIndex = new HashMap<>();
+        Map<String, Field> relationFields = new HashMap<>();
+        Map<String, Integer> relationIndexes = new HashMap<>();
+        Map<String, Optional<String>> keyRules = new HashMap<>();
+        Map<String, AnnotationNode> keyAnnotations = new HashMap<>();
         for (Node node : record.fields()) {
             Optional<Field> field = Field.of(node);
             if (field.isEmpty()) {
@@ -97,51 +103,85 @@ public class FieldRuleValidator implements AnalysisTask<SyntaxNodeAnalysisContex
             }
             Optional<String> target = relationTarget(field.get().type(), entities);
             int index = target.map(name -> relationIndex.merge(name, 1, Integer::sum) - 1).orElse(-1);
+            if (target.isPresent()) {
+                relationFields.put(field.get().name(), field.get());
+                relationIndexes.put(field.get().name(), index);
+            }
             List<AnnotationNode> rules = new ArrayList<>();
             field.get().metadata().ifPresent(metadata -> metadata.annotations().forEach(annotation -> {
                 if (ruleName(ctx, annotation).isPresent()) {
                     rules.add(annotation);
                 }
             }));
+            String name = field.get().name();
+            if (declaredKeys.containsKey(name)) {
+                keyRules.put(name, rules.size() == 1 ? ruleName(ctx, rules.get(0)) : Optional.empty());
+                if (rules.size() == 1) {
+                    keyAnnotations.put(name, rules.get(0));
+                }
+            }
             if (rules.isEmpty()) {
                 continue;
             }
-            String name = field.get().name();
             if (rules.size() > 1) {
                 report(ctx, DATASERVICE_103, rules.get(1), name, entity);
                 continue;
             }
             AnnotationNode annotation = rules.get(0);
             String rule = ruleName(ctx, annotation).orElseThrow();
-            if (declaredKeys.containsKey(name)) {
-                report(ctx, DATASERVICE_108, annotation, rule, name, entity, declaredKeys.get(name));
-                continue;
-            }
             if (field.get().key() && !(READ_ONLY.equals(rule) && hasSqlAnnotation(ctx, field.get(), "Generated"))) {
                 report(ctx, DATASERVICE_104, annotation, name, entity, rule);
                 continue;
             }
-            boolean nullable = field.get().type() instanceof OptionalTypeDescriptorNode;
-            Optional<ExpressionNode> value = value(annotation);
+            List<String> affected = AFFECTED.get(rule);
             if (target.isPresent()) {
-                TypeDefinitionNode related = entities.get(target.get());
-                if (!isOwner(field.get(), entity, related, index)) {
-                    if (!INTERNAL.equals(rule)) {
-                        report(ctx, DATASERVICE_107, annotation, rule, name, entity);
-                    }
+                if (!INTERNAL.equals(rule)) {
+                    report(ctx, DATASERVICE_107, annotation, rule, name, entity);
                     continue;
                 }
-                if (!checkRelationValue(ctx, annotation, rule, name, entity, related, nullable, value)) {
-                    continue;
-                }
-            } else if (!checkValue(ctx, annotation, rule, field.get(), entity, nullable, value)) {
+                affected = List.of("read");
+            } else if (!checkValue(ctx, annotation, rule, field.get(), entity,
+                    field.get().type() instanceof OptionalTypeDescriptorNode, value(annotation))) {
                 continue;
             }
-            List<String> affected = AFFECTED.get(rule);
             if (!operations.isEmpty() && affected.stream().noneMatch(operations::contains)) {
                 report(ctx, DATASERVICE_109, annotation, rule, name, entity, String.join("' or '", affected));
             }
         }
+        checkForeignKeys(ctx, entity, entities, operations, declaredKeys, relationFields, relationIndexes, keyRules,
+                keyAnnotations);
+    }
+
+    // The foreign key fields of a relation share one rule, and a one-to-one foreign key cannot be set by the service.
+    private static void checkForeignKeys(SyntaxNodeAnalysisContext ctx, String entity,
+                                         Map<String, TypeDefinitionNode> entities, Set<String> operations,
+                                         Map<String, String> declaredKeys, Map<String, Field> relationFields,
+                                         Map<String, Integer> relationIndexes, Map<String, Optional<String>> keyRules,
+                                         Map<String, AnnotationNode> keyAnnotations) {
+        Map<String, List<String>> byRelation = new LinkedHashMap<>();
+        declaredKeys.forEach((key, relation) -> {
+            if (keyRules.containsKey(key)) {
+                byRelation.computeIfAbsent(relation, name -> new ArrayList<>()).add(key);
+            }
+        });
+        byRelation.forEach((relation, keys) -> {
+            if (keys.stream().map(keyRules::get).distinct().count() > 1) {
+                keys.stream().filter(keyAnnotations::containsKey).findFirst().ifPresent(key ->
+                        report(ctx, DATASERVICE_108, keyAnnotations.get(key), relation, entity));
+                return;
+            }
+            Field relationField = relationFields.get(relation);
+            if (relationField == null || !operations.contains("create")
+                    || !isOneToOne(relationField, entity, entities, relationIndexes.get(relation))) {
+                return;
+            }
+            for (String key : keys) {
+                Optional<String> rule = keyRules.get(key);
+                if (rule.isPresent() && (READ_ONLY.equals(rule.get()) || INTERNAL.equals(rule.get()))) {
+                    report(ctx, DATASERVICE_112, keyAnnotations.get(key), rule.get(), key, entity);
+                }
+            }
+        });
     }
 
     private static boolean checkValue(SyntaxNodeAnalysisContext ctx, AnnotationNode annotation, String rule,
@@ -162,50 +202,6 @@ public class FieldRuleValidator implements AnalysisTask<SyntaxNodeAnalysisContex
             return false;
         }
         return true;
-    }
-
-    // The value of a relation field is the related entity's key, a tuple in key order for a composite key.
-    private static boolean checkRelationValue(SyntaxNodeAnalysisContext ctx, AnnotationNode annotation, String rule,
-                                              String name, String entity, TypeDefinitionNode related,
-                                              boolean nullable, Optional<ExpressionNode> value) {
-        if (value.isEmpty()) {
-            if (!IMMUTABLE.equals(rule) && !nullable) {
-                report(ctx, DATASERVICE_105, annotation, name, entity, rule);
-                return false;
-            }
-            return true;
-        }
-        List<Field> keys = keys(related);
-        List<TypeSymbol> keyTypes = new ArrayList<>();
-        for (Field key : keys) {
-            ctx.semanticModel().symbol(key.node()).ifPresent(symbol -> {
-                if (symbol instanceof RecordFieldSymbol recordField) {
-                    keyTypes.add(recordField.typeDescriptor());
-                }
-            });
-        }
-        String typeName = keys.size() == 1 ? keys.get(0).type().toSourceCode().trim() :
-                "[" + String.join(", ", keys.stream().map(key -> key.type().toSourceCode().trim()).toList()) + "]";
-        typeName += nullable ? "?" : "";
-        boolean matches;
-        ExpressionNode expression = value.get();
-        if (nullable && expression.kind() == SyntaxKind.NIL_LITERAL) {
-            matches = true;
-        } else if (keyTypes.size() == 1) {
-            matches = isSubtype(ctx.semanticModel(), expression, keyTypes.get(0));
-        } else {
-            matches = expression instanceof ListConstructorExpressionNode list
-                    && list.expressions().size() == keyTypes.size();
-            for (int i = 0; matches && i < keyTypes.size(); i++) {
-                matches = isSubtype(ctx.semanticModel(),
-                        (ExpressionNode) ((ListConstructorExpressionNode) expression).expressions().get(i),
-                        keyTypes.get(i));
-            }
-        }
-        if (!matches) {
-            report(ctx, DATASERVICE_106, annotation, rule, name, entity, typeName);
-        }
-        return matches;
     }
 
     private static boolean isSubtype(SemanticModel model, ExpressionNode expression, TypeSymbol type) {
@@ -233,19 +229,17 @@ public class FieldRuleValidator implements AnalysisTask<SyntaxNodeAnalysisContex
                 Optional.of(literal.literalToken()) : Optional.empty();
     }
 
-    // Persist's rule: the array side never holds the key; in a one-to-one relation, the optional side does not.
-    private static boolean isOwner(Field field, String entity, TypeDefinitionNode related, int index) {
+    private static boolean isOneToOne(Field field, String entity, Map<String, TypeDefinitionNode> entities,
+                                      int index) {
         if (field.type() instanceof ArrayTypeDescriptorNode) {
             return false;
         }
+        TypeDefinitionNode related = entities.get(typeName(field.type()).orElseThrow());
         List<Field> back = new ArrayList<>();
         for (Node node : ((RecordTypeDescriptorNode) related.typeDescriptor()).fields()) {
             Field.of(node).filter(other -> entity.equals(typeName(other.type()).orElse(""))).ifPresent(back::add);
         }
-        if (index < back.size() && back.get(index).type() instanceof ArrayTypeDescriptorNode) {
-            return true;
-        }
-        return !(field.type() instanceof OptionalTypeDescriptorNode);
+        return index < back.size() && !(back.get(index).type() instanceof ArrayTypeDescriptorNode);
     }
 
     private static Optional<String> relationTarget(Node type, Map<String, TypeDefinitionNode> entities) {
@@ -278,14 +272,6 @@ public class FieldRuleValidator implements AnalysisTask<SyntaxNodeAnalysisContex
             });
         }
         return entities;
-    }
-
-    private static List<Field> keys(TypeDefinitionNode type) {
-        List<Field> keys = new ArrayList<>();
-        for (Node node : ((RecordTypeDescriptorNode) type.typeDescriptor()).fields()) {
-            Field.of(node).filter(Field::key).ifPresent(keys::add);
-        }
-        return keys;
     }
 
     // The foreign key fields declared with @sql:Relation, and the relation field each belongs to.

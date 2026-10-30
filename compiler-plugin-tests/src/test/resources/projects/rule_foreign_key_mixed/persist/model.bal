@@ -6,14 +6,14 @@ import ballerinax/persist.sql;
 type Employee record {|
     readonly int id;
     @dataservice:Immutable
-    int deptId;
-    @sql:Relation {keys: ["deptId"]}
-    Department department;
+    string slotCode;
+    int slotSeq;
+    @sql:Relation {keys: ["slotCode", "slotSeq"]}
+    Slot slot;
 |};
 
-@dataservice:Expose
-type Department record {|
-    readonly int id;
-    string name;
+type Slot record {|
+    readonly string code;
+    readonly int seq;
     Employee[] employees;
 |};

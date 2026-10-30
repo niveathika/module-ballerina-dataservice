@@ -61,5 +61,6 @@ public const annotation FieldRuleConfig ReadOnly on source record field;
 # Marks a field that is set on create and never changed.
 public const annotation Immutable on source record field;
 
-# Marks a field that is never returned or accepted.
+# Marks a field that is never returned or accepted. On a relation field, withholds that direction of the
+# relation.
 public const annotation FieldRuleConfig Internal on source record field;

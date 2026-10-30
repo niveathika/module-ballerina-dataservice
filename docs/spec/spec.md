@@ -245,15 +245,15 @@ The plugin also checks the [field rules](#6-field-rules):
 | At most one rule on a field | `DATASERVICE_103`, error | `the field '<field>' of the entity '<Entity>' has more than one of @dataservice:ReadOnly, @dataservice:Immutable and @dataservice:Internal.` |
 | No rule on a key field, except `ReadOnly` on a `@sql:Generated` key | `DATASERVICE_104`, error | `the key field '<field>' of the entity '<Entity>' cannot have @dataservice:<rule>.` |
 | `ReadOnly` or `Internal` gives `value` on a field that is neither nullable nor generated | `DATASERVICE_105`, error | `the field '<field>' of the entity '<Entity>' needs a 'value' in @dataservice:<rule>, because it is neither nullable nor generated.` |
-| `value` is of the field's type, or of the related entity's key for a relation field | `DATASERVICE_106`, error | `the 'value' in @dataservice:<rule> of the field '<field>' of the entity '<Entity>' is not a '<type>'.` |
-| `ReadOnly` and `Immutable` only on the relation field that holds the foreign key | `DATASERVICE_107`, error | `@dataservice:<rule> cannot be used on the relation field '<field>' of the entity '<Entity>', which has no foreign key.` |
-| No rule on a foreign key field declared with `@sql:Relation` | `DATASERVICE_108`, error | `@dataservice:<rule> cannot be used on the foreign key field '<field>' of the entity '<Entity>'. Use it on the relation field '<relation>'.` |
+| `value` is of the field's type | `DATASERVICE_106`, error | `the 'value' in @dataservice:<rule> of the field '<field>' of the entity '<Entity>' is not a '<type>'.` |
+| No `ReadOnly` or `Immutable` on a relation field | `DATASERVICE_107`, error | `@dataservice:<rule> cannot be used on the relation field '<field>' of the entity '<Entity>'. Use it on the foreign key field, declared with @sql:Relation.` |
+| The foreign key fields of one relation have the same rule | `DATASERVICE_108`, error | `the foreign key fields of the relation '<relation>' of the entity '<Entity>' must have the same field rule.` |
+| No `ReadOnly` or `Internal` on the foreign key of a one-to-one relation when the entity allows `create` | `DATASERVICE_112`, error | `@dataservice:<rule> cannot be used on the foreign key field '<field>' of the entity '<Entity>', because its relation is one to one and every create would set the same value.` |
 | The entity allows an action the rule affects | `DATASERVICE_109`, warning | `@dataservice:<rule> on the field '<field>' of the entity '<Entity>' has no effect, because the entity does not allow '<actions>'.` |
 
-The relation field holding the foreign key follows persist's rule: the side of a one-to-many relation that is not an
-array, and in a one-to-one relation the side that is not optional. `<actions>` names the actions the rule affects,
-joined by `' or '`: `update` for `Immutable`, `create` and `update` for `ReadOnly`, and `read`, `create` and `update`
-for `Internal`.
+A relation is one to one when neither of its relation fields is an array. `<actions>` names the actions the rule
+affects, joined by `' or '`: `update` for `Immutable`, `create` and `update` for `ReadOnly`, `read`, `create` and
+`update` for `Internal`, and `read` for `Internal` on a relation field.
 
 ## 5. Paging
 
@@ -299,9 +299,9 @@ A field rule on a model field says what a data service does with the field:
 | `Immutable` | yes | yes | no, rejected |
 | `Internal` | no | no, rejected | no, rejected |
 
-The service sets a `ReadOnly` or `Internal` field on create to the annotation's `value`, or to `()` without one. On
-the relation field that holds a foreign key, the rule applies to the foreign key fields, and `value` is the related
-entity's key, a tuple in key order for a composite key. On the other side of a relation, only `Internal` applies.
+The service sets a `ReadOnly` or `Internal` field on create to the annotation's `value`, or to `()` without one. A
+foreign key field declared with `@sql:Relation` takes the rules like any field. A relation field takes only
+`Internal`, which withholds that direction of the relation; an `Internal` foreign key withholds both directions.
 
 ## 7. Queries
 
