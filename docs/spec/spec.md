@@ -345,6 +345,7 @@ public type Field record {|
 
 public type Entity readonly & record {|
     string name;
+    string collection;
     string 'resource;
     Datastore datastore;
     Field[] fields;
@@ -362,7 +363,9 @@ public type Relation record {|
 
 The generated service holds one `Entity` per exposed entity. `fields` holds, in model order, the fields that callers
 can see; a field with the `Internal` rule is left out, so no query option can use it. `name` is the entity name, which
-the persist SQL client also uses as the table alias, and `column` is the field's column name.
+the persist SQL client also uses as the table alias, and `column` is the field's column name. `collection` is the
+entity's collection name in the service, such as `projectAssignments`, and `'resource` is its persist resource name,
+such as `projectassignments`.
 
 `relations` holds the relations that callers can read: those whose related entity is also read by the service and
 that no `Internal` rule hides. `fields` and `targetFields` pair the fields that link the two entities: the foreign key

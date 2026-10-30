@@ -60,12 +60,14 @@ public type Field record {|
 # The description of an entity that queries are built from.
 #
 # + name - The entity name
+# + collection - The collection name of the entity in the service
 # + resource - The persist resource name of the entity
 # + datastore - The datastore of the entity
 # + fields - The fields that callers can see, in model order
 # + relations - The relations that callers can read
 public type Entity readonly & record {|
     string name;
+    string collection;
     string 'resource;
     Datastore datastore;
     Field[] fields;

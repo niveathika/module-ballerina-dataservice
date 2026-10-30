@@ -22,6 +22,7 @@ final PageConfig pages = {size: 100, maxSize: 1000};
 
 isolated function employeeEntity(Datastore datastore = H2) returns Entity => {
     name: "Employee",
+    collection: "employees",
     'resource: "employees",
     datastore,
     fields: [
@@ -37,6 +38,7 @@ isolated function employeeEntity(Datastore datastore = H2) returns Entity => {
 
 final Entity assignment = {
     name: "Assignment",
+    collection: "assignments",
     'resource: "assignments",
     datastore: H2,
     fields: [
@@ -190,6 +192,7 @@ function testInvalidSort() {
 function testQuotesInIdentifiers() {
     Entity entity = {
         name: "Odd",
+        collection: "odds",
         'resource: "odds",
         datastore: MYSQL,
         fields: [{name: "id", column: "a`b", 'type: INT, key: true}]
@@ -197,6 +200,7 @@ function testQuotesInIdentifiers() {
     test:assertEquals(sqlText(checkedQuery(entity).orderByClause), "`Odd`.`a``b` ASC");
     entity = {
         name: "Odd",
+        collection: "odds",
         'resource: "odds",
         datastore: POSTGRESQL,
         fields: [{name: "id", column: "a\"b", 'type: INT, key: true}]
@@ -270,6 +274,7 @@ function testNarrow() {
 
 final Entity departmentOwn = {
     name: "Department",
+    collection: "departments",
     'resource: "departments",
     datastore: H2,
     fields: [{name: "id", column: "id", 'type: INT, key: true}, {name: "name", column: "name", 'type: STRING}]
@@ -277,6 +282,7 @@ final Entity departmentOwn = {
 
 final Entity employeeOwn = {
     name: "Employee",
+    collection: "employees",
     'resource: "employees",
     datastore: H2,
     fields: [
@@ -288,6 +294,7 @@ final Entity employeeOwn = {
 
 final Entity employeeWithDepartment = {
     name: "Employee",
+    collection: "employees",
     'resource: "employees",
     datastore: H2,
     fields: employeeOwn.fields,
@@ -298,6 +305,7 @@ final Entity employeeWithDepartment = {
 
 final Entity departmentWithEmployees = {
     name: "Department",
+    collection: "departments",
     'resource: "departments",
     datastore: H2,
     fields: departmentOwn.fields,
@@ -308,6 +316,7 @@ final Entity departmentWithEmployees = {
 
 final Entity projectWithAssignments = {
     name: "Assignment",
+    collection: "assignments",
     'resource: "assignments",
     datastore: H2,
     fields: assignment.fields,
@@ -319,6 +328,7 @@ final Entity projectWithAssignments = {
             targetFields: ["code", "seq"],
             target: {
                 name: "Note",
+                collection: "notes",
                 'resource: "notes",
                 datastore: H2,
                 fields: [
