@@ -82,9 +82,8 @@ function testFiniteKey() {
 
 @test:Config
 function testForbidden() {
-    test:assertEquals(forbidden("Employee", "department"), <DataserviceError>{
+    test:assertEquals(forbidden("Employee", "department", "Department"), <DataserviceError>{
         code: FORBIDDEN,
-        message: "The relation 'department' of the entity 'Employee' needs 'read' scopes that the entity's 'read' " +
-            "scopes do not cover."
+        message: "The relation 'department' of the entity 'Employee' needs a 'read' scope of the entity 'Department'."
     });
 }

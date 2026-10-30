@@ -68,15 +68,17 @@ public isolated function toErrorBody(error err, string entity = "", KeyValue[] k
     return {code: INTERNAL, message: "An internal error occurred."};
 }
 
-# Builds the error body for a relation whose `read` scopes the entity's `read` scopes do not cover.
+# Builds the error body for a relation the caller cannot read, because it holds no `read` scope of the related
+# entity.
 #
 # + entity - The name of the entity
 # + relation - The relation field
+# + target - The name of the related entity
 # + return - The `FORBIDDEN` error body
-public isolated function forbidden(string entity, string relation) returns DataserviceError => {
+public isolated function forbidden(string entity, string relation, string target) returns DataserviceError => {
     code: FORBIDDEN,
-    message: string `The relation '${relation}' of the entity '${entity}' needs 'read' scopes that the entity's ` +
-        string `'read' scopes do not cover.`
+    message: string `The relation '${relation}' of the entity '${entity}' needs a 'read' scope of the entity ` +
+        string `'${target}'.`
 };
 
 # Checks that every `float` value of a key is a finite number.

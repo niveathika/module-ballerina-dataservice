@@ -125,7 +125,7 @@ as an HTTP status code.
 | Conflict | `CONFLICT` | A record with the key or a unique value already exists | `persist:AlreadyExistsError` |
 | Constraint violation | `CONSTRAINT_VIOLATION` | A write violates a foreign key | `persist:ConstraintViolationError` |
 | Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, a value is not in its format or breaks a constraint, a key is not a finite number, or a create holds too many records | The protocol module's binding error, a [`ConversionError`](#3-value-conversions), [`checkFiniteKey`](#23-checking-keys) or [`checkCreateSize`](#5-paging) |
-| Forbidden | `FORBIDDEN` | Get related or a relation in `fields` needs `read` scopes that the entity's `read` scopes do not cover | [`forbidden`](#24-forbidden-relations) |
+| Forbidden | `FORBIDDEN` | Get related or a relation in `fields`, when the caller holds no `read` scope of the related entity | [`forbidden`](#24-forbidden-relations) |
 | Internal | `INTERNAL` | Any other failure | `persist:Error` and others |
 
 ### 2.2. Mapping persist errors
@@ -169,14 +169,15 @@ message `The key '<key>' of the entity '<Entity>' is not a finite number.`, wher
 ### 2.4. Forbidden relations
 
 ```ballerina
-public isolated function forbidden(string entity, string relation) returns DataserviceError;
+public isolated function forbidden(string entity, string relation, string target) returns DataserviceError;
 ```
 
 `forbidden` returns the `FORBIDDEN` error body with the message
-`The relation '<relation>' of the entity '<Entity>' needs 'read' scopes that the entity's 'read' scopes do not cover.`
-With auth, get related and a relation in `fields` are protected by the entity's own `read` scopes, so they are
-refused when those scopes do not cover the related entity's: when the related entity's `read` list is not empty, and
-the entity's list is empty or holds a scope the related entity's does not.
+`The relation '<relation>' of the entity '<Entity>' needs a 'read' scope of the entity '<Target>'.`
+With auth, get related and a relation in `fields` require the entity's own `read` scopes. When those do not cover the
+related entity's, because the related entity's `read` list is not empty and the entity's list is empty or holds a
+scope the related entity's does not, the protocol module checks the caller's credential against the related entity's
+`read` scopes, and answers with this body when it holds none of them.
 
 ## 3. Value conversions
 
