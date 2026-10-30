@@ -268,13 +268,14 @@ public isolated function pageConfig(int size, int maxSize) returns PageConfig|er
 public isolated function checkCreateSize(int count, PageConfig config) returns DataserviceError?;
 ```
 
-A generated service declares its page sizes as configurable values and checks them at startup with a module-level
-`check` on `pageConfig`, so the program stops when a value is out of range:
+A generated service declares its page sizes as the `pageSize` and `maxPageSize` fields of its configurable
+`dataserviceConfig` record, and checks them at startup with a module-level `check` on `pageConfig`, so the program
+stops when a value is out of range:
 
 | Case | Message |
 |---|---|
-| `maxSize` below 1 | `The configurable value 'dataserviceMaxPageSize' must be at least 1, found <value>.` |
-| `size` below 1 or above `maxSize` | `The configurable value 'dataservicePageSize' must be between 1 and 'dataserviceMaxPageSize' (<max>), found <value>.` |
+| `maxSize` below 1 | `The configurable value 'dataserviceConfig.maxPageSize' must be at least 1, found <value>.` |
+| `size` below 1 or above `maxSize` | `The configurable value 'dataserviceConfig.pageSize' must be between 1 and 'dataserviceConfig.maxPageSize' (<max>), found <value>.` |
 
 `size` is the number of records in a page when the caller gives no size. `maxSize` is the largest page, and the most
 records that one create can hold. `checkCreateSize` returns an `INVALID_INPUT` error body with the message

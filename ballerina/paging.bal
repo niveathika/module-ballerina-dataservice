@@ -26,16 +26,17 @@ public type PageConfig readonly & record {|
 
 # Checks the page sizes that a data service is configured with.
 #
-# + size - The value of `dataservicePageSize`
-# + maxSize - The value of `dataserviceMaxPageSize`
+# + size - The value of `dataserviceConfig.pageSize`
+# + maxSize - The value of `dataserviceConfig.maxPageSize`
 # + return - The page sizes, or an error naming the value that is out of range
 public isolated function pageConfig(int size, int maxSize) returns PageConfig|error {
     if maxSize < 1 {
-        return error(string `The configurable value 'dataserviceMaxPageSize' must be at least 1, found ${maxSize}.`);
+        return error(string `The configurable value 'dataserviceConfig.maxPageSize' must be at least 1, ` +
+                string `found ${maxSize}.`);
     }
     if size < 1 || size > maxSize {
-        return error(string `The configurable value 'dataservicePageSize' must be between 1 and ` +
-                string `'dataserviceMaxPageSize' (${maxSize}), found ${size}.`);
+        return error(string `The configurable value 'dataserviceConfig.pageSize' must be between 1 and ` +
+                string `'dataserviceConfig.maxPageSize' (${maxSize}), found ${size}.`);
     }
     return {size, maxSize};
 }

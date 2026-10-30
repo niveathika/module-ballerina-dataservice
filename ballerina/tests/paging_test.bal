@@ -29,7 +29,7 @@ function testMaxPageSizeBelowOne() {
     test:assertTrue(config is error);
     if config is error {
         test:assertEquals(config.message(),
-                "The configurable value 'dataserviceMaxPageSize' must be at least 1, found 0.");
+                "The configurable value 'dataserviceConfig.maxPageSize' must be at least 1, found 0.");
     }
 }
 
@@ -39,8 +39,8 @@ function testPageSizeOutOfRange() {
         PageConfig|error config = pageConfig(size, 1000);
         test:assertTrue(config is error);
         if config is error {
-            test:assertEquals(config.message(), string `The configurable value 'dataservicePageSize' must be ` +
-                    string `between 1 and 'dataserviceMaxPageSize' (1000), found ${size}.`);
+            test:assertEquals(config.message(), string `The configurable value 'dataserviceConfig.pageSize' must be ` +
+                    string `between 1 and 'dataserviceConfig.maxPageSize' (1000), found ${size}.`);
         }
     }
 }
