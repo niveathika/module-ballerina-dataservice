@@ -23,6 +23,7 @@ public enum ErrorCode {
     CONFLICT,
     CONSTRAINT_VIOLATION,
     INVALID_INPUT,
+    UNAUTHENTICATED,
     FORBIDDEN,
     INTERNAL
 }
@@ -67,6 +68,22 @@ public isolated function toErrorBody(error err, string entity = "", KeyValue[] k
     logError(err, entity);
     return {code: INTERNAL, message: "An internal error occurred."};
 }
+
+# Builds the error body for a request without a credential, or with one that no authentication provider accepts.
+#
+# + return - The `UNAUTHENTICATED` error body
+public isolated function unauthenticated() returns DataserviceError => {
+    code: UNAUTHENTICATED,
+    message: "The request needs a valid credential."
+};
+
+# Builds the error body for a caller that holds no scope of the operation's action.
+#
+# + return - The `FORBIDDEN` error body
+public isolated function noScope() returns DataserviceError => {
+    code: FORBIDDEN,
+    message: "The caller holds no scope that the operation needs."
+};
 
 # Builds the error body for a relation the caller cannot read, because it holds no `read` scope of the related
 # entity.

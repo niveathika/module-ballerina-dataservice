@@ -87,3 +87,15 @@ function testForbidden() {
         message: "The relation 'department' of the entity 'Employee' needs a 'read' scope of the entity 'Department'."
     });
 }
+
+@test:Config
+function testAuthErrors() {
+    test:assertEquals(unauthenticated(), <DataserviceError>{
+        code: UNAUTHENTICATED,
+        message: "The request needs a valid credential."
+    });
+    test:assertEquals(noScope(), <DataserviceError>{
+        code: FORBIDDEN,
+        message: "The caller holds no scope that the operation needs."
+    });
+}

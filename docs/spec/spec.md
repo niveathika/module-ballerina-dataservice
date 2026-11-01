@@ -28,7 +28,7 @@ the specification is considered a bug.
     * [2.1. The error body](#21-the-error-body)
     * [2.2. Mapping persist errors](#22-mapping-persist-errors)
     * [2.3. Checking keys](#23-checking-keys)
-    * [2.4. Forbidden relations](#24-forbidden-relations)
+    * [2.4. Auth errors](#24-auth-errors)
 * [3. Value conversions](#3-value-conversions)
 * [4. Compiler plugin](#4-compiler-plugin)
 * [5. Paging](#5-paging)
@@ -106,6 +106,7 @@ public enum ErrorCode {
     CONFLICT,
     CONSTRAINT_VIOLATION,
     INVALID_INPUT,
+    UNAUTHENTICATED,
     FORBIDDEN,
     INTERNAL
 }
@@ -117,7 +118,8 @@ public type DataserviceError record {|
 ```
 
 A data service error falls into one of these categories. Each protocol package maps a category to its own form, such
-as an HTTP status code.
+as an HTTP status code, and answers every error with this body, including those its protocol module raises before the
+operation runs.
 
 | Category | `code` | Raised when | Source |
 |---|---|---|---|
@@ -125,7 +127,8 @@ as an HTTP status code.
 | Conflict | `CONFLICT` | A record with the key or a unique value already exists | `persist:AlreadyExistsError` |
 | Constraint violation | `CONSTRAINT_VIOLATION` | A write violates a foreign key | `persist:ConstraintViolationError` |
 | Invalid input | `INVALID_INPUT` | The input cannot be bound to the operation's type, a value is not in its format or breaks a constraint, a key is not a finite number, or a create holds too many records | The protocol module's binding error, a [`ConversionError`](#3-value-conversions), [`checkFiniteKey`](#23-checking-keys) or [`checkCreateSize`](#5-paging) |
-| Forbidden | `FORBIDDEN` | Get related or a relation in `fields`, when the caller holds no `read` scope of the related entity | [`forbidden`](#24-forbidden-relations) |
+| Unauthenticated | `UNAUTHENTICATED` | With auth, the caller has no credential, or one that no provider accepts | [`unauthenticated`](#24-auth-errors) |
+| Forbidden | `FORBIDDEN` | With auth, the caller holds no scope of the operation's action, or, for get related or a relation in `fields`, no `read` scope of the related entity | [`noScope`](#24-auth-errors) or [`forbidden`](#24-auth-errors) |
 | Internal | `INTERNAL` | Any other failure | `persist:Error` and others |
 
 ### 2.2. Mapping persist errors
@@ -166,11 +169,17 @@ message `The key '<key>' of the entity '<Entity>' is not a finite number.`, wher
 [2.2](#22-mapping-persist-errors). A protocol calls it before it reads, updates or deletes a record by a key that has a
 `float` field.
 
-### 2.4. Forbidden relations
+### 2.4. Auth errors
 
 ```ballerina
+public isolated function unauthenticated() returns DataserviceError;
+public isolated function noScope() returns DataserviceError;
 public isolated function forbidden(string entity, string relation, string target) returns DataserviceError;
 ```
+
+`unauthenticated` returns the `UNAUTHENTICATED` error body with the message `The request needs a valid credential.`,
+and `noScope` the `FORBIDDEN` error body with the message `The caller holds no scope that the operation needs.` A
+protocol package answers its protocol module's auth errors with them.
 
 `forbidden` returns the `FORBIDDEN` error body with the message
 `The relation '<relation>' of the entity '<Entity>' needs a 'read' scope of the entity '<Target>'.`
