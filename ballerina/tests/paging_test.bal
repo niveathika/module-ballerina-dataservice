@@ -54,3 +54,9 @@ function testCreateSize() returns error? {
         message: "A create can hold at most 3 records."
     });
 }
+
+@test:Config
+function testConfigDefaults() {
+    Config config = {};
+    test:assertEquals(config, {port: 9090, pageSize: 100, maxPageSize: 1000});
+}

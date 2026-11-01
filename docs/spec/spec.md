@@ -277,6 +277,18 @@ public isolated function pageConfig(int size, int maxSize) returns PageConfig|er
 public isolated function checkCreateSize(int count, PageConfig config) returns DataserviceError?;
 ```
 
+```ballerina
+public type Config record {|
+    int port = 9090;
+    int pageSize = 100;
+    int maxPageSize = 1000;
+|};
+```
+
+`Config` holds the runtime settings every protocol has. A protocol package's configuration type includes it and adds
+its own fields, and a generated service declares that type as its configurable `dataserviceConfig`, so a new setting
+needs no regeneration. A protocol type can give its fields other defaults.
+
 A generated service declares its page sizes as the `pageSize` and `maxPageSize` fields of its configurable
 `dataserviceConfig` record, and checks them at startup with a module-level `check` on `pageConfig`, so the program
 stops when a value is out of range:
