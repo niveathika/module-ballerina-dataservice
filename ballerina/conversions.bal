@@ -140,19 +140,22 @@ isolated function parseDate(string value) returns time:Date? {
     if groups is () {
         return ();
     }
-    time:Date date = {year: groupInt(groups, 1), month: groupInt(groups, 2), day: groupInt(groups, 3)};
-    return time:dateValidate(date) is () ? date : ();
+    time:Date|error date = toDate(groups);
+    return date is time:Date && time:dateValidate(date) is () ? date : ();
 }
+
+isolated function toDate(regexp:Groups groups) returns time:Date|error =>
+    {year: check groupInt(groups, 1), month: check groupInt(groups, 2), day: check groupInt(groups, 3)};
 
 isolated function parseTime(string value) returns time:TimeOfDay? {
     regexp:Groups? groups = TIME_PATTERN.fullMatchGroups(value);
     if groups is () {
         return ();
     }
-    int hour = groupInt(groups, 1);
-    int minute = groupInt(groups, 2);
+    int|error hour = groupInt(groups, 1);
+    int|error minute = groupInt(groups, 2);
     decimal|error second = decimal:fromString(groupText(groups, 3));
-    if hour > 23 || minute > 59 || second is error || second >= 60d {
+    if hour is error || minute is error || second is error || hour > 23 || minute > 59 || second >= 60d {
         return ();
     }
     return {hour, minute, second};
@@ -163,9 +166,8 @@ isolated function groupText(regexp:Groups groups, int index) returns string {
     return span is regexp:Span ? span.substring() : "";
 }
 
-// The patterns admit only digits in these groups, so the conversion cannot fail.
-isolated function groupInt(regexp:Groups groups, int index) returns int =>
-    checkpanic int:fromString(groupText(groups, index));
+isolated function groupInt(regexp:Groups groups, int index) returns int|error =>
+    int:fromString(groupText(groups, index));
 
 isolated function timeText(int hour, int minute, time:Seconds? second) returns string =>
     string `${pad(hour, 2)}:${pad(minute, 2)}:${secondText(second ?: 0d)}`;
