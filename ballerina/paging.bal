@@ -29,7 +29,7 @@ public type PageConfig readonly & record {|
 # + size - The value of `dataserviceConfig.pageSize`
 # + maxSize - The value of `dataserviceConfig.maxPageSize`
 # + return - The page sizes, or an error naming the value that is out of range
-public isolated function pageConfig(int size, int maxSize) returns PageConfig|error {
+public isolated function toPageConfig(int size, int maxSize) returns PageConfig|error {
     if maxSize < 1 {
         return error(string `The configurable value 'dataserviceConfig.maxPageSize' must be at least 1, ` +
                 string `found ${maxSize}.`);

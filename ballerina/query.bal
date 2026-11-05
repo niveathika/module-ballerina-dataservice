@@ -126,7 +126,7 @@ type Filter Condition|Group;
 # + size - The page size
 # + offset - The number of records to skip
 # + return - The query, an `INVALID_INPUT` error body, or a `ConversionError` for a value that does not parse
-public isolated function query(Entity entity, PageConfig config, map<map<anydata>>? filter = (),
+public isolated function toQuery(Entity entity, PageConfig config, map<map<anydata>>? filter = (),
         string[]? sort = (), int? size = (), int? offset = ()) returns Query|DataserviceError|ConversionError =>
     optionsQuery(entity, config, filter, sort, size, offset, []);
 
@@ -141,7 +141,7 @@ public isolated function query(Entity entity, PageConfig config, map<map<anydata
 # + size - The page size
 # + offset - The number of records to skip
 # + return - The query, an `INVALID_INPUT` error body, or a `ConversionError` for a value that does not parse
-public isolated function relatedQuery(Entity entity, string relation, map<anydata> row, PageConfig config,
+public isolated function toRelatedQuery(Entity entity, string relation, map<anydata> row, PageConfig config,
         map<map<anydata>>? filter = (), string[]? sort = (), int? size = (), int? offset = ())
         returns Query|DataserviceError|ConversionError {
     Relation related = relationOf(entity, relation);
@@ -199,7 +199,7 @@ isolated function optionsQuery(Entity entity, PageConfig config, map<map<anydata
 # + entity - The entity to read
 # + keys - The key values of each record, in key order
 # + return - The query
-public isolated function keysQuery(Entity entity, KeyValue[][] keys) returns Query {
+public isolated function toKeysQuery(Entity entity, KeyValue[][] keys) returns Query {
     Field[] keyFields = from Field 'field in entity.fields where 'field.key select 'field;
     return {
         whereClause: whereClause(entity, matchFilter(keyFields, keys)),
@@ -210,7 +210,7 @@ public isolated function keysQuery(Entity entity, KeyValue[][] keys) returns Que
     };
 }
 
-# Puts records read by `keysQuery` in the order of their keys.
+# Puts records read by `toKeysQuery` in the order of their keys.
 #
 # + rows - The records, which are reordered in place
 # + entity - The entity of the records
@@ -240,7 +240,7 @@ public isolated function orderByKeys(map<anydata>[] rows, Entity entity, KeyValu
 # + rows - The rows the query returned, which are cut to the page in place
 # + query - The query
 # + return - Whether records exist after the page
-public isolated function page(anydata[] rows, Query query) returns boolean {
+public isolated function trimToPage(anydata[] rows, Query query) returns boolean {
     if rows.length() > query.size {
         rows.setLength(query.size);
         return true;
@@ -256,7 +256,7 @@ public isolated function page(anydata[] rows, Query query) returns boolean {
 # + sources - The records, holding at least the fields that link the relation
 # + config - The page sizes of the data service
 # + return - The query
-public isolated function includeQuery(Entity entity, string relation, map<anydata>[] sources, PageConfig config)
+public isolated function toIncludeQuery(Entity entity, string relation, map<anydata>[] sources, PageConfig config)
         returns Query {
     Relation related = relationOf(entity, relation);
     int size = related.many ? config.size : sources.length();
@@ -274,7 +274,7 @@ public isolated function includeQuery(Entity entity, string relation, map<anydat
 # + fields - The field names to return
 # + relation - The relation field
 # + return - Whether the related records are included
-public isolated function includes(string[]? fields, string relation) returns boolean =>
+public isolated function isIncluded(string[]? fields, string relation) returns boolean =>
     fields is string[] && fields.some(name => name == relation || name.startsWith(relation + "."));
 
 # Adds the related record of a to-one relation to each narrowed record of a page, or nil when it has none.
@@ -283,7 +283,7 @@ public isolated function includes(string[]? fields, string relation) returns boo
 # + sources - The records as read, in the same order
 # + entity - The entity of the records
 # + relation - The relation field
-# + related - The records that `includeQuery` read
+# + related - The records that `toIncludeQuery` read
 # + fields - The field names to return
 public isolated function attachOne(map<anydata>[] partials, map<anydata>[] sources, Entity entity, string relation,
         map<anydata>[] related, string[] fields) {
@@ -298,7 +298,7 @@ public isolated function attachOne(map<anydata>[] partials, map<anydata>[] sourc
                 break;
             }
         }
-        partials[i][rel.'field] = found is () ? () : narrow(found, rel.target, names);
+        partials[i][rel.'field] = found is () ? () : selectFields(found, rel.target, names);
     }
 }
 
@@ -307,14 +307,17 @@ public isolated function attachOne(map<anydata>[] partials, map<anydata>[] sourc
 # + partial - The narrowed record, which is changed in place
 # + entity - The entity of the record
 # + relation - The relation field
-# + related - The records that `includeQuery` read, cut to the page by `page`
+# + related - The records that `toIncludeQuery` read, cut to the page by `trimToPage`
 # + hasMore - Whether more related records exist
 # + fields - The field names to return
 public isolated function attachMany(map<anydata> partial, Entity entity, string relation, map<anydata>[] related,
         boolean hasMore, string[] fields) {
     Relation rel = relationOf(entity, relation);
     string[] names = relatedFields(rel, fields);
-    partial[rel.'field] = {items: from map<anydata> row in related select narrow(row, rel.target, names), hasMore};
+    partial[rel.'field] = {
+        items: from map<anydata> row in related select selectFields(row, rel.target, names),
+        hasMore
+    };
 }
 
 # Builds the error body for a to-one relation with no related record.
@@ -323,7 +326,7 @@ public isolated function attachMany(map<anydata> partial, Entity entity, string 
 # + relation - The relation field
 # + key - The values of the record's key fields, in key order
 # + return - The `NOT_FOUND` error body
-public isolated function noRelated(Entity entity, string relation, KeyValue[] key) returns DataserviceError => {
+public isolated function relatedNotFound(Entity entity, string relation, KeyValue[] key) returns DataserviceError => {
     code: NOT_FOUND,
     message: string `The record with the key '${keyText(key)}' of the entity '${entity.name}' has no '${relation}'.`
 };
@@ -361,7 +364,7 @@ public isolated function checkFields(Entity entity, string[]? fields, boolean re
 # + entity - The entity of the record
 # + fields - The field names to keep
 # + return - The narrowed record
-public isolated function narrow(map<anydata> value, Entity entity, string[] fields) returns map<anydata> {
+public isolated function selectFields(map<anydata> value, Entity entity, string[] fields) returns map<anydata> {
     map<anydata> narrowed = {};
     foreach Field 'field in entity.fields {
         if ('field.key || fields.indexOf('field.name) !is ()) && value.hasKey('field.name) {
