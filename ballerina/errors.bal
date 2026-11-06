@@ -45,8 +45,9 @@ public type KeyValue int|string|float|decimal|boolean;
 # + err - The error the persist client returned
 # + entity - The name of the entity
 # + key - The values of the record's key fields, in key order
+# + operation - The name of the operation, which is logged with the error
 # + return - The error body for the error's category
-public isolated function toErrorBody(error err, string entity = "", KeyValue[] key = [])
+public isolated function toErrorBody(error err, string entity = "", KeyValue[] key = [], string operation = "")
         returns DataserviceError {
     if err is persist:NotFoundError {
         return {
@@ -62,10 +63,10 @@ public isolated function toErrorBody(error err, string entity = "", KeyValue[] k
     }
     // The SQL datastores put driver text in these errors, so it is logged rather than returned.
     if err is persist:ConstraintViolationError {
-        logError(err, entity);
+        logError(err, entity, operation);
         return {code: CONSTRAINT_VIOLATION, message: string `The operation violates a constraint of the entity '${entity}'.`};
     }
-    logError(err, entity);
+    logError(err, entity, operation);
     return {code: INTERNAL, message: "An internal error occurred."};
 }
 
@@ -118,10 +119,5 @@ public isolated function checkFiniteKey(string entity, KeyValue[] key) returns D
 isolated function keyText(KeyValue[] key) returns string =>
     string:'join("/", ...from KeyValue value in key select value.toString());
 
-isolated function logError(error err, string entity) {
-    if entity == "" {
-        log:printError("A data service operation failed.", 'error = err);
-    } else {
-        log:printError("A data service operation failed.", 'error = err, entity = entity);
-    }
-}
+isolated function logError(error err, string entity, string operation) =>
+    log:printError("A data service operation failed.", 'error = err, entity = entity, operation = operation);

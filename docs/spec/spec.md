@@ -198,7 +198,7 @@ The error body is the closed record `DataserviceError`, with the fields `code`, 
 
 ### 5.3. Persist errors
 
-`toErrorBody` maps an error that the persist client returned to the error body, given the entity's name and the record's key. The message is written by `toErrorBody`, not taken from the error, because the SQL datastores put driver text, such as table and constraint names, in their error messages.
+`toErrorBody` maps an error that the persist client returned to the error body, given the entity's name, the record's key and the operation's name. The message is written by `toErrorBody`, not taken from the error, because the SQL datastores put driver text, such as table and constraint names, in their error messages.
 
 | Error | `code` | `message` |
 |---|---|---|
@@ -207,7 +207,7 @@ The error body is the closed record `DataserviceError`, with the fields `code`, 
 | `persist:ConstraintViolationError` | `CONSTRAINT_VIOLATION` | `The operation violates a constraint of the entity '<Entity>'.` |
 | Any other error | `INTERNAL` | `An internal error occurred.` |
 
-`<key>` is the key text. For a constraint violation and an internal error, `toErrorBody` logs the error, with the entity's name, at the `ERROR` level.
+`<key>` is the key text. For a constraint violation and an internal error, `toErrorBody` logs the error, with the entity's name and the operation's name, at the `ERROR` level.
 
 ### 5.4. Keys
 

@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/io;
 import ballerina/persist;
 import ballerina/test;
 
@@ -60,6 +61,15 @@ function testPersistErrorIsInternal() {
         code: INTERNAL,
         message: "An internal error occurred."
     });
+}
+
+@test:Config
+function testLogHasTheEntityAndOperation() returns error? {
+    _ = toErrorBody(error persist:Error("pool exhausted"), "Employee", [1], "get one");
+    string[] lines = from string line in check io:fileReadLines("target/errors_test.log")
+        where line.includes("pool exhausted") select line;
+    test:assertEquals(lines.length(), 1);
+    test:assertTrue(lines[0].includes("entity=\"Employee\" operation=\"get one\""), lines[0]);
 }
 
 @test:Config
