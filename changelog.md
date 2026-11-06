@@ -8,4 +8,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- [Add the `Expose` annotation and its compiler plugin validation, the error body and the value conversions of persist data services](https://github.com/ballerina-platform/ballerina-spec/issues/1503)
+- [Add the protocol-neutral support of persist data services](https://github.com/ballerina-platform/ballerina-spec/issues/1503)
