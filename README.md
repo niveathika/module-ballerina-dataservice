@@ -13,6 +13,13 @@ The `ballerina/dataservice` package supports the data services that `bal persist
 
 The package holds the `@dataservice:Expose` annotation, which selects the entities a data service exposes and the actions each allows, and the protocol-neutral runtime that generated services call.
 
+### Key Features
+
+- `@dataservice:Expose` selects the entities a data service exposes, the actions each allows and their scopes
+- `@dataservice:ReadOnly`, `@dataservice:Immutable` and `@dataservice:Internal` control what the service does with a field
+- A compiler plugin checks the annotations while the model is edited and when `bal persist` generates
+- A protocol-neutral runtime for filters, sorting, paging, `fields`, relation reads, value conversions and the error body
+
 ## Quick start
 
 1. Add the persist entry with a data service to the package:
