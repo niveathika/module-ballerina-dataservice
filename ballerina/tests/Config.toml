@@ -1,0 +1,7 @@
+[[ballerina.log.destinations]]
+type = "stderr"
+
+[[ballerina.log.destinations]]
+type = "file"
+path = "target/errors_test.log"
+mode = "TRUNCATE"
