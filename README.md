@@ -1,14 +1,52 @@
 # Ballerina Data Service Library
 
 [![Build](https://github.com/ballerina-platform/module-ballerina-dataservice/actions/workflows/build-timestamped-master.yml/badge.svg)](https://github.com/ballerina-platform/module-ballerina-dataservice/actions/workflows/build-timestamped-master.yml)
+[![codecov](https://codecov.io/gh/ballerina-platform/module-ballerina-dataservice/branch/main/graph/badge.svg)](https://codecov.io/gh/ballerina-platform/module-ballerina-dataservice)
+[![Security Scan](https://github.com/ballerina-platform/module-ballerina-dataservice/actions/workflows/security-scan.yml/badge.svg)](https://github.com/ballerina-platform/module-ballerina-dataservice/actions/workflows/security-scan.yml)
+[![GraalVM Check](https://github.com/ballerina-platform/module-ballerina-dataservice/actions/workflows/build-with-bal-test-graalvm.yml/badge.svg)](https://github.com/ballerina-platform/module-ballerina-dataservice/actions/workflows/build-with-bal-test-graalvm.yml)
 [![GitHub Last Commit](https://img.shields.io/github/last-commit/ballerina-platform/module-ballerina-dataservice.svg)](https://github.com/ballerina-platform/module-ballerina-dataservice/commits/main)
 [![GitHub Issues](https://img.shields.io/github/issues/ballerina-platform/ballerina-library/module/dataservice.svg?label=Open%20Issues)](https://github.com/ballerina-platform/ballerina-library/labels/module%2Fdataservice)
 
 ## Overview
 
-The `ballerina/dataservice` package supports data services that `bal persist` generates from a persist model. A data service exposes the entities of the model over a protocol such as HTTP, with no hand-written service code.
+The `ballerina/dataservice` package supports the data services that `bal persist` generates from a persist model. A data service exposes the entities of the model over a protocol such as HTTP, with no hand-written service code.
 
-The design is in the [data service proposal](https://github.com/ballerina-platform/ballerina-spec/issues/1503).
+The package holds the `@dataservice:Expose` annotation, which selects the entities a data service exposes and the actions each allows, and the protocol-neutral runtime that generated services call.
+
+## Quick start
+
+1. Add the persist entry with a data service to the package:
+
+    ```bash
+    bal persist add --datastore h2 --dataservice http
+    ```
+
+2. Annotate each entity to expose in `persist/model.bal`. A bare annotation allows every action:
+
+    ```ballerina
+    import ballerina/dataservice;
+    import ballerina/persist as _;
+
+    @dataservice:Expose
+    type Employee record {|
+        readonly int id;
+        string name;
+    |};
+
+    @dataservice:Expose {operations: [dataservice:READ]}
+    type Department record {|
+        readonly int id;
+        string name;
+    |};
+    ```
+
+3. Build the package. The persist client and the data service are generated into `generated/`:
+
+    ```bash
+    bal build
+    ```
+
+For the details, see the [specification](https://github.com/ballerina-platform/module-ballerina-dataservice/blob/main/docs/spec/spec.md).
 
 ## Build from the source
 
