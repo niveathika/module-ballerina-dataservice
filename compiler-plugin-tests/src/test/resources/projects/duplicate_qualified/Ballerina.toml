@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "duplicate_qualified"
+version = "0.1.0"

@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "rule_one_to_one"
+version = "0.1.0"

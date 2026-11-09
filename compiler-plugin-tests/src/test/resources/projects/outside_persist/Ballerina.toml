@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "outside_persist"
+version = "0.1.0"

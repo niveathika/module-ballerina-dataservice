@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "enum_type"
+version = "0.1.0"

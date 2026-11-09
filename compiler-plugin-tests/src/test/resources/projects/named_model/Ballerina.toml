@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "named_model"
+version = "0.1.0"

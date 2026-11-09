@@ -22,11 +22,12 @@ import io.ballerina.projects.plugins.CompilerPlugin;
 import io.ballerina.projects.plugins.CompilerPluginContext;
 
 /**
- * Compiler plugin of the `ballerina/dataservice` package.
+ * Compiler plugin that validates the `ballerina/dataservice` annotations in a persist model.
  */
 public class DataserviceCompilerPlugin extends CompilerPlugin {
 
     @Override
     public void init(CompilerPluginContext context) {
+        context.addCodeAnalyzer(new DataserviceCodeAnalyzer());
     }
 }

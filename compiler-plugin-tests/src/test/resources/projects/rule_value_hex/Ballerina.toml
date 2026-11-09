@@ -1,0 +1,4 @@
+[package]
+org = "dataservice_test"
+name = "rule_value_hex"
+version = "0.1.0"
