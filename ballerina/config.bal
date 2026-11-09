@@ -14,3 +14,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+# The runtime settings that every protocol's configuration includes.
+#
+# + port - The port of the listener
+# + pageSize - The number of records in a page when the caller gives no size
+# + maxPageSize - The largest page, and the most records one create can hold
+public type Config record {|
+    int port = 9090;
+    int pageSize = 100;
+    int maxPageSize = 1000;
+|};
